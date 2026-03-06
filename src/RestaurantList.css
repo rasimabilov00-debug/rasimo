@@ -1,0 +1,92 @@
+.restaurant-list-container {
+  padding: 20px;
+  background-color: #f5f5f5;
+  min-height: 100vh;
+  overflow-y: auto;
+}
+
+.restaurant-list-container h2 {
+  color: #333;
+  text-align: center;
+  margin-bottom: 30px;
+  font-size: 24px;
+}
+
+.restaurants-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 20px;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.restaurant-card {
+  background-color: white;
+  border-radius: 8px;
+  padding: 20px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  transition: transform 0.2s, box-shadow 0.2s;
+  border-left: 4px solid #e74c3c;
+}
+
+.restaurant-card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+}
+
+.restaurant-card h3 {
+  margin: 0 0 10px 0;
+  color: #2c3e50;
+  font-size: 18px;
+}
+
+.offer-title {
+  color: #e74c3c;
+  font-size: 15px;
+  margin: 10px 0;
+}
+
+.description {
+  color: #666;
+  font-size: 14px;
+  margin: 10px 0;
+  line-height: 1.4;
+}
+
+.restaurant-details {
+  margin: 15px 0;
+  padding: 10px 0;
+  border-top: 1px solid #eee;
+  border-bottom: 1px solid #eee;
+}
+
+.restaurant-details p {
+  margin: 8px 0;
+  color: #555;
+  font-size: 13px;
+}
+
+.restaurant-details strong {
+  color: #2c3e50;
+}
+
+.discount {
+  color: #27ae60 !important;
+  font-weight: bold !important;
+}
+
+.website-link {
+  display: inline-block;
+  margin-top: 15px;
+  padding: 10px 15px;
+  background-color: #3498db;
+  color: white;
+  text-decoration: none;
+  border-radius: 5px;
+  font-size: 13px;
+  transition: background-color 0.2s;
+}
+
+.website-link:hover {
+  background-color: #2980b9;
+}

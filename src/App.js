@@ -1,8 +1,19 @@
 import React from "react";
-import MapComponent from "./MapComponent"; // import the map component you created
+import MapComponent from "./MapComponent";
+import RestaurantList from "./RestaurantList";
+import "./App.css";
 
 function App() {
-  return <MapComponent />; // render the map
+  return (
+    <div className="app-container">
+      <div className="map-section">
+        <MapComponent />
+      </div>
+      <div className="list-section">
+        <RestaurantList />
+      </div>
+    </div>
+  );
 }
 
 export default App;

@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Budapest Restaurants Map</title>
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <!-- Leaflet JavaScript -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <!-- Tabletop.js for Google Sheets -->
+    <script src="https://unpkg.com/tabletop@1.6.0/src/tabletop.js"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: Arial, sans-serif;
+        }
+        #map {
+            height: 100vh;
+            width: 100vw;
+        }
+        .leaflet-popup-content {
+            max-width: 250px;
+        }
+        .popup-content {
+            line-height: 1.4;
+        }
+        .popup-content a {
+            color: #007bff;
+            text-decoration: none;
+        }
+        .popup-content a:hover {
+            text-decoration: underline;
+        }
+        .error-message {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: rgba(255, 0, 0, 0.8);
+            color: white;
+            padding: 10px;
+            border-radius: 5px;
+            z-index: 1000;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div id="map"></div>
+    <div id="error-message" class="error-message"></div>
+
+    <script>
+        // Step 1: Initialize the map centered on Budapest
+        const map = L.map('map').setView([47.4979, 19.0402], 13);
+
+        // Add OpenStreetMap tiles
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+        }).addTo(map);
+
+        // Step 2: Define marker icons based on category
+        const markerIcons = {
+            'Burger': 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png',
+            'Chicken': 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-orange.png',
+            'Kebab': 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-yellow.png',
+            'Street Food': 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-green.png',
+            'default': 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-blue.png'
+        };
+
+        // Function to get marker icon based on category
+        function getMarkerIcon(category) {
+            const iconUrl = markerIcons[category] || markerIcons['default'];
+            return L.icon({
+                iconUrl: iconUrl,
+                shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
+                iconSize: [25, 41],
+                iconAnchor: [12, 41],
+                popupAnchor: [1, -34],
+                shadowSize: [41, 41]
+            });
+        }
+
+        // Step 3: Fetch data from Google Sheet using Tabletop.js
+        // Replace this key with your Google Sheet key if different
+        const sheetKey = '2PACX-1vS-FOjSr0OgK1Y-pUv0XfYKulLvMZDUR2MkDKcdb-xaN2Cyp3ADa5Kp4c0QkZwGRPom9tQ_WfHiLJZ3';
+
+        Tabletop.init({
+            key: sheetKey,
+            callback: function(data, tabletop) {
+                console.log('Data loaded successfully from Google Sheet:', data);
+
+                // Step 4: Add markers for each restaurant
+                data.forEach(function(restaurant, index) {
+                    const lat = parseFloat(restaurant.Latitude);
+                    const lng = parseFloat(restaurant.Longitude);
+
+                    // Skip if coordinates are invalid
+                    if (isNaN(lat) || isNaN(lng)) {
+                        console.warn('Invalid coordinates for restaurant:', restaurant['Restaurant Name']);
+                        return;
+                    }
+
+                    // Get marker icon based on category
+                    const icon = getMarkerIcon(restaurant.Category);
+
+                    // Step 5: Create popup content with all required fields
+                    const popupContent = `
+                        <div class="popup-content">
+                            <h3>${restaurant['Restaurant Name']}</h3>
+                            <p><strong>Offer Title:</strong> ${restaurant['Offer Title']}</p>
+                            <p><strong>Description:</strong> ${restaurant['Offer Description']}</p>
+                            <p><strong>Price:</strong> ${restaurant['Price']}</p>
+                            <p><strong>Valid Until:</strong> ${restaurant['Offer Valid Until']}</p>
+                            <p><strong>Address:</strong> ${restaurant['Address']}</p>
+                            <p><strong>Category:</strong> ${restaurant['Category']}</p>
+                            <p><strong>Student Discount:</strong> ${restaurant['Student Discount']}</p>
+                            <p><strong>Website:</strong> <a href="${restaurant['Website']}" target="_blank">${restaurant['Website']}</a></p>
+                        </div>
+                    `;
+
+                    // Add marker to map
+                    L.marker([lat, lng], { icon: icon })
+                        .addTo(map)
+                        .bindPopup(popupContent);
+                });
+
+                console.log('All markers added to map successfully');
+            },
+            simpleSheet: true,
+            error: function(error) {
+                // Step 6: Handle errors properly
+                console.error('Failed to load data from Google Sheet:', error);
+                alert('Failed to load restaurants from Google Sheet. Please check the console for details.');
+                
+                // Show error message on map
+                const errorDiv = document.getElementById('error-message');
+                errorDiv.innerHTML = 'Failed to load restaurants from Google Sheet. Check console for details.';
+                errorDiv.style.display = 'block';
+            }
+        });
+    </script>
+</body>
+</html>
