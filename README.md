@@ -1,3 +1,16 @@
+# Restaurant Map Simulator (rsim)
+
+A React application displaying a Leaflet map of Budapest restaurants with offers pulled from a Google Sheet. Key enhancements added on top of the default CRA setup:
+
+- **Google Sheets integration** using PapaParse to fetch restaurant data (latitude/longitude, offers, etc.)
+- **Markers on map** for each restaurant with popups showing detailed information
+- **User location marker** and auto‑centering using Geolocation API
+- **Restaurant list panel** showing all entries from the sheet in card layout
+- **Unique colored icons** for each restaurant and responsive layout
+- Project is public on GitHub and deployable via GitHub Pages
+
+Original CRA README content follows.
+
 # Getting Started with Create React App
 
 This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
