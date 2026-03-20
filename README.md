@@ -4,10 +4,28 @@ A React application displaying a Leaflet map of Budapest restaurants with offers
 
 - **Google Sheets integration** using PapaParse to fetch restaurant data (latitude/longitude, offers, etc.)
 - **Markers on map** for each restaurant with popups showing detailed information
-- **User location marker** and auto‑centering using Geolocation API
+- **User location marker** and auto-centering using Geolocation API
 - **Restaurant list panel** showing all entries from the sheet in card layout
 - **Unique colored icons** for each restaurant and responsive layout
+- **Pipeline data integration** via JSON (`public/pipeline-restaurants.json`) to simulate external data ingestion
+- **Data merging logic** combining Google Sheets and pipeline restaurants into a unified dataset
+- **Source-based UI styling**:
+  - 🟣 Pipeline restaurants → violet markers + highlighted cards
+  - 🔵 Sheet restaurants → blue markers + standard cards
+- **Category filtering system** to filter restaurants dynamically
 - Project is public on GitHub and deployable via GitHub Pages
+
+---
+
+## New Feature: Pipeline Integration
+
+This project supports a simulated **data pipeline**, where external restaurant data is ingested and merged with Google Sheets data.
+
+Pipeline data is stored in:
+
+public/pipeline-restaurants.json
+
+
 
 Original CRA README content follows.
 
