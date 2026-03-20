@@ -39,15 +39,6 @@ const RestaurantList = ({
   }, [indexedRestaurants, selectedCategory]);
 
   useEffect(() => {
-    console.log("🍽️ RestaurantList received restaurants:", restaurants.length);
-    console.log("🍽️ Filtered restaurants:", filteredRestaurants.length);
-    console.log(
-      "🍽️ Restaurant names:",
-      restaurants.map((r) => r["Restaurant Name"]).filter(Boolean)
-    );
-  }, [restaurants, filteredRestaurants]);
-
-  useEffect(() => {
     if (selectedRestaurantIndex === null || selectedRestaurantIndex === undefined) {
       return;
     }
@@ -67,8 +58,16 @@ const RestaurantList = ({
   if (loading) {
     return (
       <div className="restaurant-list-container">
-        <h2>Restaurants & Offers</h2>
-        <p>Loading restaurants...</p>
+        <div className="restaurant-panel-shell">
+          <div className="restaurant-list-hero">
+            <div>
+              <p className="panel-kicker">Budapest Food Map</p>
+              <h2>Restaurants & Offers</h2>
+              <p className="panel-subtitle">Loading restaurants...</p>
+            </div>
+          </div>
+          <div className="panel-state-card">Loading restaurants...</div>
+        </div>
       </div>
     );
   }
@@ -76,107 +75,170 @@ const RestaurantList = ({
   if (error) {
     return (
       <div className="restaurant-list-container">
-        <h2>Restaurants & Offers</h2>
-        <p style={{ color: "red" }}>{error}</p>
+        <div className="restaurant-panel-shell">
+          <div className="restaurant-list-hero">
+            <div>
+              <p className="panel-kicker">Budapest Food Map</p>
+              <h2>Restaurants & Offers</h2>
+              <p className="panel-subtitle">Something went wrong</p>
+            </div>
+          </div>
+          <div className="panel-state-card panel-state-error">{error}</div>
+        </div>
       </div>
     );
   }
 
   return (
     <div className="restaurant-list-container">
-      <div className="restaurant-list-header">
-        <h2>Restaurants & Offers ({filteredRestaurants.length})</h2>
+      <div className="restaurant-panel-shell">
+        <div className="restaurant-list-hero">
+          <div>
+            <p className="panel-kicker">Budapest Food Map</p>
+            <h2>Restaurants & Offers</h2>
+            <p className="panel-subtitle">
+              Discover places, compare categories, and spot pipeline results instantly.
+            </p>
+          </div>
 
-        <div className="category-filter">
-          <label htmlFor="category-select">Food category</label>
-          <select
-            id="category-select"
-            value={selectedCategory}
-            onChange={(e) => setSelectedCategory(e.target.value)}
-          >
-            {categories.map((cat) => (
-              <option key={cat} value={cat}>
-                {cat}
-              </option>
-            ))}
-          </select>
+          <div className="panel-counter-card">
+            <span className="panel-counter-label">Visible</span>
+            <span className="panel-counter-value">{filteredRestaurants.length}</span>
+          </div>
         </div>
-      </div>
 
-      {filteredRestaurants.length === 0 ? (
-        <p>No restaurants found</p>
-      ) : (
-        <div className="restaurants-grid">
-          {filteredRestaurants.map(({ restaurant, originalIndex }, visibleIndex) => {
-            const isSelected = originalIndex === selectedRestaurantIndex;
+        <div className="restaurant-toolbar">
+          <div className="category-filter modern-filter">
+            <label htmlFor="category-select">Category</label>
+            <select
+              id="category-select"
+              value={selectedCategory}
+              onChange={(e) => setSelectedCategory(e.target.value)}
+            >
+              {categories.map((cat) => (
+                <option key={cat} value={cat}>
+                  {cat}
+                </option>
+              ))}
+            </select>
+          </div>
 
-            return (
-              <div
-                key={`${restaurant["Restaurant Name"] || "restaurant"}-${originalIndex}`}
-                ref={(element) => {
-                  itemRefs.current[visibleIndex] = element;
-                }}
-                className={`restaurant-card ${isSelected ? "selected" : ""}`}
-                onClick={() =>
-                  onRestaurantSelect && onRestaurantSelect(originalIndex)
-                }
-                style={{ cursor: "pointer" }}
-              >
-                <h3>{restaurant["Restaurant Name"]}</h3>
+          <div className="legend-row">
+            <span className="legend-pill legend-pill-sheet">Sheet</span>
+            <span className="legend-pill legend-pill-pipeline">Pipeline</span>
+          </div>
+        </div>
 
-                {restaurant["Offer Title"] && (
-                  <p className="offer-title">
-                    <strong>📍 {restaurant["Offer Title"]}</strong>
-                  </p>
-                )}
+        {filteredRestaurants.length === 0 ? (
+          <div className="panel-state-card">No restaurants found.</div>
+        ) : (
+          <div className="restaurants-grid modern-grid">
+            {filteredRestaurants.map(({ restaurant, originalIndex }, visibleIndex) => {
+              const isSelected = originalIndex === selectedRestaurantIndex;
+              const isPipeline = restaurant.Source === "pipeline";
 
-                {restaurant.Description && (
-                  <p className="description">{restaurant.Description}</p>
-                )}
+              return (
+                <div
+                  key={`${restaurant["Restaurant Name"] || "restaurant"}-${originalIndex}`}
+                  ref={(element) => {
+                    itemRefs.current[visibleIndex] = element;
+                  }}
+                  className={`restaurant-card modern-card ${isSelected ? "selected" : ""} ${
+                    isPipeline ? "pipeline-card" : "sheet-card"
+                  }`}
+                  onClick={() =>
+                    onRestaurantSelect && onRestaurantSelect(originalIndex)
+                  }
+                >
+                  <div className="restaurant-card-top">
+                    <div className="restaurant-title-wrap">
+                      <h3>{restaurant["Restaurant Name"]}</h3>
+                      {restaurant.Category && (
+                        <p className="restaurant-mini-category">{restaurant.Category}</p>
+                      )}
+                    </div>
 
-                <div className="restaurant-details">
-                  {restaurant.Price && (
-                    <p>
-                      <strong>Price:</strong> {restaurant.Price}
-                    </p>
+                    <span
+                      className={`source-badge ${
+                        isPipeline ? "pipeline-badge" : "sheet-badge"
+                      }`}
+                    >
+                      {isPipeline ? "Pipeline" : "Sheet"}
+                    </span>
+                  </div>
+
+                  {restaurant["Offer Title"] && (
+                    <div className="offer-banner">
+                      <span className="offer-icon">✦</span>
+                      <span>{restaurant["Offer Title"]}</span>
+                    </div>
                   )}
 
-                  {restaurant.Category && (
-                    <p>
-                      <strong>Category:</strong> {restaurant.Category}
-                    </p>
+                  {restaurant.Description && (
+                    <p className="description">{restaurant.Description}</p>
                   )}
 
-                  {restaurant.Address && (
-                    <p>
-                      <strong>Address:</strong> {restaurant.Address}
-                    </p>
-                  )}
+                  <div className="detail-chips">
+                    {restaurant.Price && (
+                      <span className="detail-chip">Price: {restaurant.Price}</span>
+                    )}
+                    {restaurant["Student Discount"] && (
+                      <span className="detail-chip detail-chip-discount">
+                        Discount: {restaurant["Student Discount"]}
+                      </span>
+                    )}
+                  </div>
 
-                  {restaurant["Student Discount"] && (
-                    <p className="discount">
-                      <strong>Student Discount:</strong>{" "}
-                      {restaurant["Student Discount"]}
-                    </p>
-                  )}
+                  <div className="restaurant-details refined-details">
+                    {restaurant.Address && (
+                      <div className="detail-row">
+                        <span className="detail-label">Address</span>
+                        <span className="detail-value">{restaurant.Address}</span>
+                      </div>
+                    )}
+
+                    {restaurant["Offer Valid Until"] && (
+                      <div className="detail-row">
+                        <span className="detail-label">Valid until</span>
+                        <span className="detail-value">
+                          {restaurant["Offer Valid Until"]}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="card-footer">
+                    {restaurant.Website ? (
+                      <a
+                        href={restaurant.Website}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="website-link refined-link"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        Visit website
+                      </a>
+                    ) : (
+                      <span className="no-website-text">No website listed</span>
+                    )}
+
+                    <button
+                      type="button"
+                      className="focus-button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onRestaurantSelect && onRestaurantSelect(originalIndex);
+                      }}
+                    >
+                      View on map
+                    </button>
+                  </div>
                 </div>
-
-                {restaurant.Website && (
-                  <a
-                    href={restaurant.Website}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="website-link"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    Visit Website →
-                  </a>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      )}
+              );
+            })}
+          </div>
+        )}
+      </div>
     </div>
   );
 };

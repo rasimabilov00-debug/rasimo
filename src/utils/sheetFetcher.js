@@ -2,18 +2,28 @@ import Papa from "papaparse";
 
 const SHEET_ID = "18lnywex_IOZegpbI9XbaEcDyV5Y5H-R8K7gzxGFtido";
 const API_KEY = process.env.REACT_APP_GOOGLE_SHEETS_API_KEY;
-
-// Your tab name from the screenshot
 const SHEET_RANGE = "Form_Responses!A1:Z2000";
 
 const SHEETS_API_URL = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(
   SHEET_RANGE
 )}?key=${API_KEY}`;
 
-// CSV fallback
 const SHEET_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv`;
+const PIPELINE_URL = "/pipeline-restaurants.json";
 
 const normalizeText = (value) => (value || "").toString().trim();
+
+const normalizeKey = (restaurant = {}) => {
+  const name = normalizeText(restaurant["Restaurant Name"]).toLowerCase();
+  const address = normalizeText(restaurant.Address).toLowerCase();
+  return `${name}__${address}`;
+};
+
+const hasValidCoords = (row) => {
+  const lat = parseFloat(row.Latitude);
+  const lng = parseFloat(row.Longitude);
+  return !Number.isNaN(lat) && !Number.isNaN(lng);
+};
 
 const parseRowsToObjects = (values = []) => {
   if (!values.length) return [];
@@ -29,33 +39,60 @@ const parseRowsToObjects = (values = []) => {
   });
 };
 
-const toRestaurantShape = (row = {}) => ({
-  "Restaurant Name": row["Restaurant Name"] || "",
-  Address: row.Address || "",
-  Latitude: row.Latitude ? String(row.Latitude) : "",
-  Longitude: row.Longitude ? String(row.Longitude) : "",
-  "Offer Title": row["Offer Title"] || "",
-  Description: row.Description || "",
-  Price: row.Price || "",
-  "Offer Valid Until": row["Offer Valid Until"] || "",
-  Website: row.Website || "",
-  Category: row.Category || "Restaurant",
-  "Student Discount": row["Student Discount"] || "",
+const toRestaurantShape = (row = {}, source = "sheet") => ({
+  "Restaurant Name":
+    row["Restaurant Name"] || row.name || row.title || "",
+  Address: row.Address || row.address || "",
+  Latitude:
+    row.Latitude !== undefined && row.Latitude !== null && row.Latitude !== ""
+      ? String(row.Latitude)
+      : row.latitude !== undefined && row.latitude !== null && row.latitude !== ""
+      ? String(row.latitude)
+      : "",
+  Longitude:
+    row.Longitude !== undefined && row.Longitude !== null && row.Longitude !== ""
+      ? String(row.Longitude)
+      : row.longitude !== undefined && row.longitude !== null && row.longitude !== ""
+      ? String(row.longitude)
+      : "",
+  "Offer Title":
+    row["Offer Title"] || row.offerTitle || row.offer_title || "",
+  Description: row.Description || row.description || "",
+  Price: row.Price || row.price || "",
+  "Offer Valid Until":
+    row["Offer Valid Until"] || row.offerValidUntil || "",
+  Website: row.Website || row.website || row.link || "",
+  Category: row.Category || row.category || "Restaurant",
+  "Student Discount":
+    row["Student Discount"] || row.studentDiscount || "",
+  Source: row.Source || row.source || source,
 });
 
-const hasValidCoords = (row) => {
-  const lat = parseFloat(row.Latitude);
-  const lng = parseFloat(row.Longitude);
+const mergeRestaurants = (sheetRestaurants = [], pipelineRestaurants = []) => {
+  const merged = [];
+  const seen = new Set();
 
-  return !Number.isNaN(lat) && !Number.isNaN(lng);
+  // pipeline first so pipeline version wins on duplicates
+  [...pipelineRestaurants, ...sheetRestaurants].forEach((restaurant) => {
+    const shaped = toRestaurantShape(restaurant, restaurant.Source || "sheet");
+    const key = normalizeKey(shaped);
+
+    if (!normalizeText(shaped["Restaurant Name"])) return;
+    if (!hasValidCoords(shaped)) return;
+    if (seen.has(key)) return;
+
+    seen.add(key);
+    merged.push(shaped);
+  });
+
+  return merged;
 };
 
-export const fetchRestaurantData = async () => {
+const fetchSheetRestaurants = async () => {
   console.log("🔍 Starting Google Sheet fetch...");
   console.log("🔑 API key present:", !!API_KEY);
   console.log("📄 Sheet range:", SHEET_RANGE);
 
-  // Try Google Sheets API first
   if (API_KEY) {
     try {
       console.log("🔐 Fetching via Google Sheets API...");
@@ -63,12 +100,18 @@ export const fetchRestaurantData = async () => {
 
       if (!response.ok) {
         const text = await response.text();
-        console.warn("⚠️ Sheets API failed, switching to CSV fallback:", response.status, text);
+        console.warn(
+          "⚠️ Sheets API failed, switching to CSV fallback:",
+          response.status,
+          text
+        );
         throw new Error(`Sheets API failed: ${response.status}`);
       }
 
       const data = await response.json();
-      const parsed = parseRowsToObjects(data.values || []).map(toRestaurantShape);
+      const parsed = parseRowsToObjects(data.values || []).map((row) =>
+        toRestaurantShape(row, "sheet")
+      );
 
       const valid = parsed.filter(
         (r) => normalizeText(r["Restaurant Name"]) && hasValidCoords(r)
@@ -76,7 +119,10 @@ export const fetchRestaurantData = async () => {
 
       console.log("✅ Sheets API total rows:", parsed.length);
       console.log("🗺️ Sheets API valid restaurants:", valid.length);
-      console.log("🍽️ Restaurant names:", valid.map((r) => r["Restaurant Name"]));
+      console.log(
+        "🍽️ Sheet restaurant names:",
+        valid.map((r) => r["Restaurant Name"])
+      );
 
       return valid;
     } catch (error) {
@@ -84,7 +130,6 @@ export const fetchRestaurantData = async () => {
     }
   }
 
-  // CSV fallback
   try {
     console.log("🔄 Fetching via CSV fallback...");
     const response = await fetch(SHEET_URL);
@@ -104,7 +149,7 @@ export const fetchRestaurantData = async () => {
       });
     });
 
-    const parsed = rows.map(toRestaurantShape);
+    const parsed = rows.map((row) => toRestaurantShape(row, "sheet"));
 
     const valid = parsed.filter(
       (r) => normalizeText(r["Restaurant Name"]) && hasValidCoords(r)
@@ -112,7 +157,10 @@ export const fetchRestaurantData = async () => {
 
     console.log("✅ CSV total rows:", parsed.length);
     console.log("🗺️ CSV valid restaurants:", valid.length);
-    console.log("🍽️ Restaurant names:", valid.map((r) => r["Restaurant Name"]));
+    console.log(
+      "🍽️ Sheet restaurant names:",
+      valid.map((r) => r["Restaurant Name"])
+    );
 
     return valid;
   } catch (error) {
@@ -121,6 +169,60 @@ export const fetchRestaurantData = async () => {
   }
 };
 
-// IMPORTANT: App.js already calls fetchRestaurantsFromSERPAPI,
-// so make it return sheet data directly
+const fetchPipelineRestaurants = async () => {
+  try {
+    console.log(`🟣 Fetching pipeline restaurants from ${PIPELINE_URL}...`);
+    const response = await fetch(PIPELINE_URL);
+
+    if (!response.ok) {
+      throw new Error(`Pipeline file fetch failed: ${response.status}`);
+    }
+
+    const data = await response.json();
+    const parsedArray = Array.isArray(data)
+      ? data
+      : Array.isArray(data.restaurants)
+      ? data.restaurants
+      : [];
+
+    const parsed = parsedArray.map((item) => toRestaurantShape(item, "pipeline"));
+
+    const valid = parsed.filter(
+      (r) => normalizeText(r["Restaurant Name"]) && hasValidCoords(r)
+    );
+
+    console.log("🟣 Pipeline total rows:", parsed.length);
+    console.log("🟣 Pipeline valid restaurants:", valid.length);
+    console.log(
+      "🟣 Pipeline restaurant names:",
+      valid.map((r) => r["Restaurant Name"])
+    );
+
+    return valid;
+  } catch (error) {
+    console.warn("⚠️ Pipeline fetch failed:", error);
+    return [];
+  }
+};
+
+export const fetchRestaurantData = async () => {
+  const [sheetRestaurants, pipelineRestaurants] = await Promise.all([
+    fetchSheetRestaurants(),
+    fetchPipelineRestaurants(),
+  ]);
+
+  const merged = mergeRestaurants(sheetRestaurants, pipelineRestaurants);
+
+  console.log("✅ Final merged restaurants:", merged.length);
+  console.log(
+    "✅ Final sources:",
+    merged.map((r) => ({
+      name: r["Restaurant Name"],
+      source: r.Source,
+    }))
+  );
+
+  return merged;
+};
+
 export const fetchRestaurantsFromSERPAPI = fetchRestaurantData;
