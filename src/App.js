@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import MapComponent from "./MapComponent";
 import RestaurantList from "./RestaurantList";
 import { fetchRestaurantsFromSERPAPI } from "./utils/sheetFetcher";
+import { fetchRestaurantsFromHunter } from "./utils/restaurantHunter";
 import "./App.css";
 
 function App() {
@@ -10,14 +11,71 @@ function App() {
   const [error, setError] = useState(null);
   const [selectedRestaurantIndex, setSelectedRestaurantIndex] = useState(null);
 
+  const normalizeText = (value) => (value || "").toString().trim().toLowerCase();
+
+  const toRestaurantKey = (restaurant = {}) => {
+    const name = normalizeText(restaurant["Restaurant Name"]);
+    const address = normalizeText(restaurant.Address);
+    return `${name}__${address}`;
+  };
+
+  const mergeRestaurantLists = (baseRestaurants = [], hunterRestaurants = []) => {
+    const merged = [];
+    const seen = new Set();
+
+    [...baseRestaurants, ...hunterRestaurants].forEach((restaurant) => {
+      const key = toRestaurantKey(restaurant);
+      if (!restaurant || !restaurant["Restaurant Name"] || !key) return;
+      if (seen.has(key)) return;
+
+      seen.add(key);
+      merged.push(restaurant);
+    });
+
+    return merged;
+  };
+
   useEffect(() => {
     const loadRestaurants = async () => {
       try {
         setLoading(true);
         setError(null);
-        const data = await fetchRestaurantsFromSERPAPI();
-        console.log("✅ App loaded restaurants:", data?.length || 0, data);
-        setRestaurants(Array.isArray(data) ? data : []);
+
+        const [baseResult, hunterResult] = await Promise.allSettled([
+          fetchRestaurantsFromSERPAPI(),
+          fetchRestaurantsFromHunter(
+            "restaurants",
+            "Budapest, Hungary",
+            15,
+            false
+          ),
+        ]);
+
+        const baseRestaurants =
+          baseResult.status === "fulfilled" && Array.isArray(baseResult.value)
+            ? baseResult.value
+            : [];
+
+        const hunterRestaurants =
+          hunterResult.status === "fulfilled" && Array.isArray(hunterResult.value)
+            ? hunterResult.value
+            : [];
+
+        if (baseResult.status === "rejected") {
+          console.warn("Sheet/pipeline fetch failed:", baseResult.reason);
+        }
+
+        if (hunterResult.status === "rejected") {
+          console.warn("Hunter fetch failed:", hunterResult.reason);
+        }
+
+        const combined = mergeRestaurantLists(baseRestaurants, hunterRestaurants);
+
+        console.log("✅ Loaded base restaurants:", baseRestaurants.length);
+        console.log("✅ Loaded hunter restaurants:", hunterRestaurants.length);
+        console.log("✅ Final merged restaurants:", combined.length);
+
+        setRestaurants(combined);
       } catch (err) {
         console.error("Failed to load restaurants:", err);
         setError("Error loading restaurant data.");

@@ -11,6 +11,45 @@ const RestaurantList = ({
   const itemRefs = useRef([]);
   const [selectedCategory, setSelectedCategory] = useState("All");
 
+  const getValidWebsiteUrl = (restaurant) => {
+    const name = (restaurant?.["Restaurant Name"] || "")
+      .toString()
+      .trim()
+      .toLowerCase();
+
+    const allowedNames = ["kfc", "bamba", "burger king"];
+    const isAllowedRestaurant = allowedNames.some((allowed) =>
+      name.includes(allowed)
+    );
+
+    if (!isAllowedRestaurant) {
+      return null;
+    }
+
+    const website = restaurant?.Website;
+    const value = (website || "").toString().trim();
+    if (!value) return null;
+    if (/^(n\/a|na|null|none|-|#)$/i.test(value)) return null;
+
+    try {
+      const parsed = new URL(value);
+      if (!/^https?:$/.test(parsed.protocol)) return null;
+
+      const host = parsed.hostname.replace(/^www\./i, "").toLowerCase();
+      if (
+        host.includes("google.com") ||
+        host.includes("maps.google") ||
+        host === "goo.gl"
+      ) {
+        return null;
+      }
+
+      return parsed.toString();
+    } catch {
+      return null;
+    }
+  };
+
   const indexedRestaurants = useMemo(() => {
     return restaurants.map((restaurant, originalIndex) => ({
       restaurant,
@@ -96,9 +135,6 @@ const RestaurantList = ({
           <div>
             <p className="panel-kicker">Budapest Food Map</p>
             <h2>Restaurants & Offers</h2>
-            <p className="panel-subtitle">
-              Discover places, compare categories, and spot pipeline results instantly.
-            </p>
           </div>
 
           <div className="panel-counter-card">
@@ -109,7 +145,7 @@ const RestaurantList = ({
 
         <div className="restaurant-toolbar">
           <div className="category-filter modern-filter">
-            <label htmlFor="category-select">Category</label>
+            <label htmlFor="category-select">Selected Category</label>
             <select
               id="category-select"
               value={selectedCategory}
@@ -122,11 +158,6 @@ const RestaurantList = ({
               ))}
             </select>
           </div>
-
-          <div className="legend-row">
-            <span className="legend-pill legend-pill-sheet">Sheet</span>
-            <span className="legend-pill legend-pill-pipeline">Pipeline</span>
-          </div>
         </div>
 
         {filteredRestaurants.length === 0 ? (
@@ -136,6 +167,7 @@ const RestaurantList = ({
             {filteredRestaurants.map(({ restaurant, originalIndex }, visibleIndex) => {
               const isSelected = originalIndex === selectedRestaurantIndex;
               const isPipeline = restaurant.Source === "pipeline";
+              const websiteUrl = getValidWebsiteUrl(restaurant);
 
               return (
                 <div
@@ -157,14 +189,6 @@ const RestaurantList = ({
                         <p className="restaurant-mini-category">{restaurant.Category}</p>
                       )}
                     </div>
-
-                    <span
-                      className={`source-badge ${
-                        isPipeline ? "pipeline-badge" : "sheet-badge"
-                      }`}
-                    >
-                      {isPipeline ? "Pipeline" : "Sheet"}
-                    </span>
                   </div>
 
                   {restaurant["Offer Title"] && (
@@ -208,9 +232,9 @@ const RestaurantList = ({
                   </div>
 
                   <div className="card-footer">
-                    {restaurant.Website ? (
+                    {websiteUrl && (
                       <a
-                        href={restaurant.Website}
+                        href={websiteUrl}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="website-link refined-link"
@@ -218,8 +242,6 @@ const RestaurantList = ({
                       >
                         Visit website
                       </a>
-                    ) : (
-                      <span className="no-website-text">No website listed</span>
                     )}
 
                     <button

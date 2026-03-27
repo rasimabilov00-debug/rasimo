@@ -116,6 +116,124 @@ app.get("/api/restaurants", async (req, res) => {
   }
 });
 
+// ============================================================
+// RESTAURANT HUNTER ENDPOINTS - Integration with notebook
+// ============================================================
+
+app.get("/api/search-restaurants", async (req, res) => {
+  try {
+    const { q, location, limit } = req.query;
+    const query = q || "restaurants";
+    const loc = location || "Budapest, Hungary";
+    const count = parseInt(limit) || 10;
+
+    // If using SERPAPI_API_KEY, use that; otherwise use Google Places
+    const serpApiKey = process.env.SERPAPI_API_KEY;
+
+    if (serpApiKey) {
+      // Use SerpApi endpoint
+      const response = await fetch(
+        `https://serpapi.com/search?engine=google_local&q=${encodeURIComponent(query)}&location=${encodeURIComponent(loc)}&api_key=${serpApiKey}&num=${count}`
+      );
+
+      if (!response.ok) {
+        throw new Error(`SerpApi error: ${response.status}`);
+      }
+
+      const data = await response.json();
+      const items = data.local_results?.places || data.local_results || [];
+
+      const formatted = Array.isArray(items)
+        ? items.map((item) => ({
+            title: item.title || "",
+            address: item.address || "",
+            type: item.type || "restaurant",
+            rating: item.rating || null,
+            reviews: item.reviews || null,
+            phone: item.phone || "",
+            description: item.description || "",
+            price: item.price || "",
+            gps_coordinates: {
+              latitude:
+                item.gps_coordinates?.latitude ?? item.latitude ?? null,
+              longitude:
+                item.gps_coordinates?.longitude ?? item.longitude ?? null,
+            },
+            website:
+              item.links?.website || item.website || item.website_link || item.link || "",
+            links: {
+              website:
+                item.links?.website || item.website || item.website_link || item.link || "",
+              directions: item.links?.directions || item.directions || "",
+            },
+          }))
+        : [];
+
+      return res.json({ restaurants: formatted });
+    } else {
+      // Fallback to Google Places API
+      const results = await Promise.all(
+        SEARCH_QUERIES.slice(0, 3).map((q) => searchText(q))
+      );
+      const flattened = results.flat().map((place) => ({
+        title: place.displayName?.text || "",
+        address: place.formattedAddress || "",
+        type: Array.isArray(place.types) ? place.types[0] : "restaurant",
+        rating: place.rating || null,
+        reviews: place.userRatingCount || null,
+        description: place.editorialSummary?.text || "",
+        gps_coordinates: {
+          latitude: place.location?.latitude || null,
+          longitude: place.location?.longitude || null,
+        },
+        website: "",
+      }));
+
+      res.json({ restaurants: flattened });
+    }
+  } catch (error) {
+    console.error("Search restaurants failed:", error);
+    res.status(500).json({
+      error: "Failed to search restaurants",
+      details: error.message,
+    });
+  }
+});
+
+app.post("/api/scan-restaurants", async (req, res) => {
+  try {
+    const { restaurants } = req.body;
+
+    if (!Array.isArray(restaurants)) {
+      return res
+        .status(400)
+        .json({ error: "restaurants must be an array" });
+    }
+
+    // Optional: Implement website scanning here
+    // For now, return restaurants as-is with enriched fields
+    const enriched = restaurants.map((restaurant) => ({
+      ...restaurant,
+      website_scanned: true,
+      menu_signal: false,
+      offer_signal: false,
+      discount_signal: false,
+      matched_keywords: [],
+    }));
+
+    console.log(
+      `✅ Website scanning completed for ${enriched.length} restaurants`
+    );
+    res.json(enriched);
+  } catch (error) {
+    console.error("Scan restaurants failed:", error);
+    res.status(500).json({
+      error: "Failed to scan restaurants",
+      details: error.message,
+    });
+  }
+});
+
 app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);
 });

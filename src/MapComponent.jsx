@@ -24,6 +24,32 @@ const hasValidRestaurantCoords = (restaurant) => {
   );
 };
 
+const getPopupWebsiteUrl = (restaurant) => {
+  const name = (restaurant?.["Restaurant Name"] || "")
+    .toString()
+    .trim()
+    .toLowerCase();
+
+  const allowedNames = ["kfc", "bamba", "burger king"];
+  const isAllowedRestaurant = allowedNames.some((allowed) =>
+    name.includes(allowed)
+  );
+
+  if (!isAllowedRestaurant) return null;
+
+  const value = (restaurant?.Website || "").toString().trim();
+  if (!value) return null;
+  if (/^(n\/a|na|null|none|-|#)$/i.test(value)) return null;
+
+  try {
+    const parsed = new URL(value);
+    if (!/^https?:$/.test(parsed.protocol)) return null;
+    return parsed.toString();
+  } catch {
+    return null;
+  }
+};
+
 const MapFlyToSelected = ({ restaurants, selectedRestaurantIndex }) => {
   const map = useMap();
 
@@ -116,6 +142,7 @@ const MapComponent = ({
         const restaurantName = marker["Restaurant Name"] || "";
         const isPipeline = marker.Source === "pipeline";
         const isSelected = originalIndex === selectedRestaurantIndex;
+        const websiteUrl = getPopupWebsiteUrl(marker);
 
         const markerIcon = isSelected
           ? selectedIcon
@@ -149,8 +176,8 @@ const MapComponent = ({
                     <strong>Address:</strong> {marker.Address}
                   </p>
                 )}
-                {marker.Website && (
-                  <a href={marker.Website} target="_blank" rel="noopener noreferrer">
+                {websiteUrl && (
+                  <a href={websiteUrl} target="_blank" rel="noopener noreferrer">
                     Go to website
                   </a>
                 )}

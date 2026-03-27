@@ -25,10 +25,6 @@ Pipeline data is stored in:
 
 public/pipeline-restaurants.json
 
-
-
-Original CRA README content follows.
-
 # Getting Started with Create React App
 
 This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
