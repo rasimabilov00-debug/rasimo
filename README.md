@@ -12,9 +12,6 @@ A React application displaying a Leaflet map of Budapest restaurants with offers
 - **Source-based UI styling**:
   - 🟣 Pipeline restaurants → violet markers + highlighted cards
   - 🔵 Sheet restaurants → blue markers + standard cards
-- **Category filtering system** to filter restaurants dynamically
-- Project is public on GitHub and deployable via GitHub Pages
-
 ---
 
 ## New Feature: Pipeline Integration
