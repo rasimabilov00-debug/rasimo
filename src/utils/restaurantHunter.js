@@ -3,6 +3,9 @@
  * Fetches restaurants with websites and enriches data from the API
  */
 
+import { normalizeSourceLabel } from "./sourceLabel";
+import { normalizeRestaurant } from "./restaurantNormalizer";
+
 const BAD_DOMAINS = new Set([
   "tripadvisor.com",
   "foodora.hu",
@@ -32,6 +35,15 @@ const isLikelyOfficial = (url) => {
   return domain && !BAD_DOMAINS.has(domain);
 };
 
+const normalizeText = (value) =>
+  (value || "").toString().trim().toLowerCase().replace(/\s+/g, " ");
+
+const toRestaurantKey = (restaurant = {}) => {
+  const name = normalizeText(restaurant.name);
+  const address = normalizeText(restaurant.address);
+  return `${name}__${address}`;
+};
+
 const extractWebsiteFromItem = (item) => {
   if (!item || typeof item !== "object") return null;
 
@@ -58,42 +70,48 @@ const extractWebsiteFromItem = (item) => {
  * Format restaurant data from SerpApi response to match app expectations
  */
 const formatRestaurantData = (item) => {
-  const website = extractWebsiteFromItem(item);
-  const gps = item.gps_coordinates || {};
+  const website = extractWebsiteFromItem(item) || "";
 
-  return {
-    "Restaurant Name": item.title || "",
-    "Address": item.address || "",
-    "Latitude": gps.latitude || "",
-    "Longitude": gps.longitude || "",
-    "Category": item.type || "Restaurant",
-    "Website": website || "",
-    "Phone": item.phone || "",
-    "Description": item.description || "",
-    "Offer Title": item.offer_title || (item.description ? "Available Offer" : ""),
-    "Offer Valid Until": "",
-    "Student Discount": "",
-    "Price": item.price || "",
-    "Rating": item.rating || "",
-    "Reviews": item.reviews || "",
-    "Source": "custom"
-  };
+  return normalizeRestaurant(
+    {
+      id: item.id || item.place_id || "",
+      name: item.title || "",
+      address: item.address || "",
+      lat: item.gps_coordinates?.latitude ?? item.latitude ?? null,
+      lng: item.gps_coordinates?.longitude ?? item.longitude ?? null,
+      website,
+      source: normalizeSourceLabel("hunter"),
+      category: item.type || "Restaurant",
+      description: item.description || "",
+      offerTitle: item.offer_title || (item.description ? "Available Offer" : ""),
+      offerValidUntil: "",
+      studentDiscount: "",
+      price: item.price || "",
+      rating: item.rating || "",
+      reviews: item.reviews || "",
+      phone: item.phone || "",
+    },
+    { defaultSource: "hunter" }
+  );
 };
 
 /**
  * Search restaurants using backend API (which calls SerpApi)
  */
 export const searchRestaurantsWithWebsites = async (
-  query = "restaurants",
+  query = "",
   location = "Budapest, Hungary",
   targetCount = 10
 ) => {
   try {
     const params = new URLSearchParams({
-      q: query,
       location: location,
       limit: targetCount
     });
+
+    if ((query || "").toString().trim()) {
+      params.set("q", query);
+    }
 
     const response = await fetch(`/api/search-restaurants?${params}`);
     
@@ -102,6 +120,7 @@ export const searchRestaurantsWithWebsites = async (
       return [];
     }
 
+    // Backend provides search results (SerpApi or Google Places fallback).
     const data = await response.json();
     const items = data.restaurants || [];
 
@@ -110,16 +129,27 @@ export const searchRestaurantsWithWebsites = async (
     const formatted = items
       .map((item) => {
         const website = extractWebsiteFromItem(item);
-        if (!website || isLikelyOfficial(website)) {
-          return formatRestaurantData(item);
+        const formattedItem = formatRestaurantData(item);
+
+        // Keep only likely official links; marketplace/social links are cleared.
+        if (website && !isLikelyOfficial(website)) {
+          formattedItem.website = "";
         }
-        return null;
+
+        return formattedItem;
       })
       .filter(Boolean)
-      .slice(0, targetCount);
 
-    console.log(`✅ Found ${formatted.length} restaurants with valid websites`);
-    return formatted;
+    const seen = new Set();
+    const unique = formatted.filter((restaurant) => {
+      const key = toRestaurantKey(restaurant);
+      if (!key || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+
+    console.log(`✅ Found ${unique.length} restaurants with valid websites`);
+    return unique.slice(0, targetCount);
   } catch (error) {
     console.error("Error searching restaurants:", error);
     return [];
@@ -153,12 +183,43 @@ export const enrichRestaurantData = async (restaurants) => {
 };
 
 /**
+ * Resolve official website URLs for a list of restaurants through backend lookup.
+ */
+export const resolveRestaurantWebsites = async (restaurants = []) => {
+  try {
+    if (!Array.isArray(restaurants) || restaurants.length === 0) {
+      return restaurants;
+    }
+
+    // Ask backend to find a better official website when one is missing.
+    const response = await fetch("/api/resolve-websites", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ restaurants }),
+    });
+
+    if (!response.ok) {
+      console.warn("Website resolution failed, returning original list");
+      return restaurants;
+    }
+
+    const data = await response.json();
+    return Array.isArray(data.restaurants)
+      ? data.restaurants.map((item) => normalizeRestaurant(item, { defaultSource: item.source || item.Source || "sheet" }))
+      : restaurants;
+  } catch (error) {
+    console.error("Error resolving restaurant websites:", error);
+    return restaurants;
+  }
+};
+
+/**
  * Main function to fetch and enrich restaurant data from notebook logic
  */
 export const fetchRestaurantsFromHunter = async (
-  query = "restaurants",
+  query = "",
   location = "Budapest, Hungary",
-  targetCount = 10,
+  targetCount = 20,
   shouldEnrich = false
 ) => {
   console.log("🔍 Starting restaurant hunt...");

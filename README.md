@@ -3,14 +3,16 @@
 A React application displaying a Leaflet map of Budapest restaurants with offers pulled from a Google Sheet. Key enhancements added on top of the default CRA setup:
 
 - **Google Sheets integration** using PapaParse to fetch restaurant data (latitude/longitude, offers, etc.)
+- **Backend search integration** with multi-query restaurant discovery (Express + API routes)
 - **Markers on map** for each restaurant with popups showing detailed information
 - **User location marker** and auto-centering using Geolocation API
 - **Restaurant list panel** showing all entries from the sheet in card layout
 - **Unique colored icons** for each restaurant and responsive layout
 - **Pipeline data integration** via JSON (`public/pipeline-restaurants.json`) to simulate external data ingestion
-- **Data merging logic** combining Google Sheets and pipeline restaurants into a unified dataset
+- **Data merging logic** combining sheet, pipeline, and hunter results into a unified dataset
 - **Source-based UI styling**:
   - 🟣 Pipeline restaurants → violet markers + highlighted cards
+  - 🟠 Hunter/API restaurants → orange markers + highlighted cards
   - 🔵 Sheet restaurants → blue markers + standard cards
 ---
 
@@ -21,6 +23,26 @@ This project supports a simulated **data pipeline**, where external restaurant d
 Pipeline data is stored in:
 
 public/pipeline-restaurants.json
+
+## Backend Structure (Minimal)
+
+Server logic is now split into small modules for readability:
+
+- `server.js` for app bootstrap and route mounting
+- `routes/restaurantRoutes.js` for API endpoints
+- `services/restaurantService.js` for search and website-resolution logic
+- `config/searchQueries.js` for curated multi-query search terms
+
+## Legacy Standalone HTML Files
+
+This project runs as a Create React App and uses only public/index.html as the runtime HTML template.
+
+The following files are archived legacy standalone demos and are not used by npm start or npm run build:
+
+- archive/legacy-html/budapest-restaurants-map.html
+- archive/legacy-html/budapest-restaurants-map-complete.html
+
+They were moved out of the project root for safety and clarity, with no deletion.
 
 # Getting Started with Create React App
 

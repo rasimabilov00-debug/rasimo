@@ -1,5 +1,10 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef } from "react";
 import "./RestaurantList.css";
+import { getRestaurantWebsiteUrl } from "./utils/websiteUrl";
+import {
+  getRestaurantSourceLabel,
+  getSourceDisplayLabel,
+} from "./utils/sourceLabel";
 
 const RestaurantList = ({
   restaurants = [],
@@ -7,92 +12,32 @@ const RestaurantList = ({
   onRestaurantSelect,
   loading,
   error,
+  selectedCategory = "All",
+  onCategoryChange,
+  categories = ["All"],
+  searchText = "",
+  onSearchChange,
 }) => {
   const itemRefs = useRef([]);
-  const [selectedCategory, setSelectedCategory] = useState("All");
 
-  const getValidWebsiteUrl = (restaurant) => {
-    const name = (restaurant?.["Restaurant Name"] || "")
-      .toString()
-      .trim()
-      .toLowerCase();
-
-    const allowedNames = ["kfc", "bamba", "burger king"];
-    const isAllowedRestaurant = allowedNames.some((allowed) =>
-      name.includes(allowed)
-    );
-
-    if (!isAllowedRestaurant) {
-      return null;
-    }
-
-    const website = restaurant?.Website;
-    const value = (website || "").toString().trim();
-    if (!value) return null;
-    if (/^(n\/a|na|null|none|-|#)$/i.test(value)) return null;
-
-    try {
-      const parsed = new URL(value);
-      if (!/^https?:$/.test(parsed.protocol)) return null;
-
-      const host = parsed.hostname.replace(/^www\./i, "").toLowerCase();
-      if (
-        host.includes("google.com") ||
-        host.includes("maps.google") ||
-        host === "goo.gl"
-      ) {
-        return null;
-      }
-
-      return parsed.toString();
-    } catch {
-      return null;
-    }
-  };
-
-  const indexedRestaurants = useMemo(() => {
-    return restaurants.map((restaurant, originalIndex) => ({
-      restaurant,
-      originalIndex,
-    }));
-  }, [restaurants]);
-
-  const categories = useMemo(() => {
-    const unique = Array.from(
-      new Set(
-        restaurants
-          .map((r) => (r.Category || "").trim())
-          .filter((c) => c !== "")
-      )
-    );
-    unique.sort();
-    return ["All", ...unique];
-  }, [restaurants]);
-
-  const filteredRestaurants = useMemo(() => {
-    if (selectedCategory === "All") return indexedRestaurants;
-
-    return indexedRestaurants.filter(
-      ({ restaurant }) => (restaurant.Category || "").trim() === selectedCategory
-    );
-  }, [indexedRestaurants, selectedCategory]);
+  // This list is already filtered by App (category + search), so no extra filtering here.
+  const indexedRestaurants = useMemo(
+    () => restaurants.map((restaurant, index) => ({ restaurant, index })),
+    [restaurants]
+  );
 
   useEffect(() => {
     if (selectedRestaurantIndex === null || selectedRestaurantIndex === undefined) {
       return;
     }
 
-    const visibleIndex = filteredRestaurants.findIndex(
-      ({ originalIndex }) => originalIndex === selectedRestaurantIndex
-    );
-
-    if (visibleIndex !== -1 && itemRefs.current[visibleIndex]) {
-      itemRefs.current[visibleIndex].scrollIntoView({
+    if (itemRefs.current[selectedRestaurantIndex]) {
+      itemRefs.current[selectedRestaurantIndex].scrollIntoView({
         behavior: "smooth",
         block: "center",
       });
     }
-  }, [selectedRestaurantIndex, filteredRestaurants]);
+  }, [selectedRestaurantIndex, indexedRestaurants]);
 
   if (loading) {
     return (
@@ -139,7 +84,7 @@ const RestaurantList = ({
 
           <div className="panel-counter-card">
             <span className="panel-counter-label">Visible</span>
-            <span className="panel-counter-value">{filteredRestaurants.length}</span>
+            <span className="panel-counter-value">{indexedRestaurants.length}</span>
           </div>
         </div>
 
@@ -149,7 +94,7 @@ const RestaurantList = ({
             <select
               id="category-select"
               value={selectedCategory}
-              onChange={(e) => setSelectedCategory(e.target.value)}
+              onChange={(e) => onCategoryChange && onCategoryChange(e.target.value)}
             >
               {categories.map((cat) => (
                 <option key={cat} value={cat}>
@@ -158,74 +103,100 @@ const RestaurantList = ({
               ))}
             </select>
           </div>
+
+          <div className="search-filter modern-filter">
+            <label htmlFor="restaurant-search">Search</label>
+            <input
+              id="restaurant-search"
+              type="text"
+              placeholder="burger, pizza, cheap, name..."
+              value={searchText}
+              onChange={(e) => onSearchChange && onSearchChange(e.target.value)}
+            />
+          </div>
         </div>
 
-        {filteredRestaurants.length === 0 ? (
+        {indexedRestaurants.length === 0 ? (
           <div className="panel-state-card">No restaurants found.</div>
         ) : (
           <div className="restaurants-grid modern-grid">
-            {filteredRestaurants.map(({ restaurant, originalIndex }, visibleIndex) => {
-              const isSelected = originalIndex === selectedRestaurantIndex;
-              const isPipeline = restaurant.Source === "pipeline";
-              const websiteUrl = getValidWebsiteUrl(restaurant);
+            {indexedRestaurants.map(({ restaurant, index }) => {
+              const isSelected = index === selectedRestaurantIndex;
+              const sourceLabel = getRestaurantSourceLabel(restaurant);
+              const isPipeline = sourceLabel === "pipeline";
+              const isHunter = sourceLabel === "hunter";
+              // Shared helper keeps website links clean and consistent across list/map.
+              const websiteUrl = getRestaurantWebsiteUrl(restaurant);
+              const sourceBadgeClass = isPipeline
+                ? "pipeline-badge"
+                : isHunter
+                ? "hunter-badge"
+                : "sheet-badge";
+              const sourceCardClass = isPipeline
+                ? "pipeline-card"
+                : isHunter
+                ? "hunter-card"
+                : "sheet-card";
 
               return (
                 <div
-                  key={`${restaurant["Restaurant Name"] || "restaurant"}-${originalIndex}`}
+                  key={`${restaurant.id || restaurant.name || "restaurant"}-${index}`}
                   ref={(element) => {
-                    itemRefs.current[visibleIndex] = element;
+                    itemRefs.current[index] = element;
                   }}
-                  className={`restaurant-card modern-card ${isSelected ? "selected" : ""} ${
-                    isPipeline ? "pipeline-card" : "sheet-card"
-                  }`}
+                  className={`restaurant-card modern-card ${isSelected ? "selected" : ""} ${sourceCardClass}`}
                   onClick={() =>
-                    onRestaurantSelect && onRestaurantSelect(originalIndex)
+                    onRestaurantSelect && onRestaurantSelect(index)
                   }
                 >
                   <div className="restaurant-card-top">
                     <div className="restaurant-title-wrap">
-                      <h3>{restaurant["Restaurant Name"]}</h3>
-                      {restaurant.Category && (
-                        <p className="restaurant-mini-category">{restaurant.Category}</p>
+                      <h3>{restaurant.name}</h3>
+                      {restaurant.category && (
+                        <p className="restaurant-mini-category">{restaurant.category}</p>
                       )}
                     </div>
+
+                    <span className={`source-badge ${sourceBadgeClass}`}>
+                      {getSourceDisplayLabel(sourceLabel)}
+                    </span>
                   </div>
 
-                  {restaurant["Offer Title"] && (
+                  {restaurant.offerTitle && (
                     <div className="offer-banner">
                       <span className="offer-icon">✦</span>
-                      <span>{restaurant["Offer Title"]}</span>
+                      <span>{restaurant.offerTitle}</span>
                     </div>
                   )}
 
-                  {restaurant.Description && (
-                    <p className="description">{restaurant.Description}</p>
+                  {restaurant.description && (
+                    <p className="description">{restaurant.description}</p>
                   )}
 
                   <div className="detail-chips">
-                    {restaurant.Price && (
-                      <span className="detail-chip">Price: {restaurant.Price}</span>
+                    {restaurant.price && (
+                      <span className="detail-chip">Price: {restaurant.price}</span>
                     )}
-                    {restaurant["Student Discount"] && (
+                    {restaurant.studentDiscount && (
                       <span className="detail-chip detail-chip-discount">
-                        Discount: {restaurant["Student Discount"]}
+                        Discount: {restaurant.studentDiscount}
                       </span>
                     )}
                   </div>
 
                   <div className="restaurant-details refined-details">
-                    {restaurant.Address && (
+                    {restaurant.address && (
                       <div className="detail-row">
                         <span className="detail-label">Address</span>
-                        <span className="detail-value">{restaurant.Address}</span>
+                        <span className="detail-value">{restaurant.address}</span>
                       </div>
                     )}
 
-                    {restaurant["Offer Valid Until"] && (
+                    {restaurant.offerValidUntil && (
                       <div className="detail-row">
                         <span className="detail-label">Valid until</span>
                         <span className="detail-value">
-                          {restaurant["Offer Valid Until"]}
+                          {restaurant.offerValidUntil}
                         </span>
                       </div>
                     )}
@@ -249,7 +220,7 @@ const RestaurantList = ({
                       className="focus-button"
                       onClick={(e) => {
                         e.stopPropagation();
-                        onRestaurantSelect && onRestaurantSelect(originalIndex);
+                        onRestaurantSelect && onRestaurantSelect(index);
                       }}
                     >
                       View on map

@@ -1,8 +1,13 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { MapContainer, TileLayer, Marker, Popup, useMap } from "react-leaflet";
 import { Icon } from "leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
+import { getRestaurantWebsiteUrl } from "./utils/websiteUrl";
+import {
+  getRestaurantSourceLabel,
+  getSourceDisplayLabel,
+} from "./utils/sourceLabel";
 
 delete L.Icon.Default.prototype._getIconUrl;
 L.Icon.Default.mergeOptions({
@@ -14,40 +19,14 @@ L.Icon.Default.mergeOptions({
 const DEFAULT_CENTER = [47.4979, 19.0402];
 
 const hasValidRestaurantCoords = (restaurant) => {
-  const lat = parseFloat(restaurant?.Latitude);
-  const lng = parseFloat(restaurant?.Longitude);
+  const lat = parseFloat(restaurant?.lat);
+  const lng = parseFloat(restaurant?.lng);
   return (
     restaurant &&
     !Number.isNaN(lat) &&
     !Number.isNaN(lng) &&
-    (restaurant["Restaurant Name"] || "").toString().trim()
+    (restaurant?.name || "").toString().trim()
   );
-};
-
-const getPopupWebsiteUrl = (restaurant) => {
-  const name = (restaurant?.["Restaurant Name"] || "")
-    .toString()
-    .trim()
-    .toLowerCase();
-
-  const allowedNames = ["kfc", "bamba", "burger king"];
-  const isAllowedRestaurant = allowedNames.some((allowed) =>
-    name.includes(allowed)
-  );
-
-  if (!isAllowedRestaurant) return null;
-
-  const value = (restaurant?.Website || "").toString().trim();
-  if (!value) return null;
-  if (/^(n\/a|na|null|none|-|#)$/i.test(value)) return null;
-
-  try {
-    const parsed = new URL(value);
-    if (!/^https?:$/.test(parsed.protocol)) return null;
-    return parsed.toString();
-  } catch {
-    return null;
-  }
 };
 
 const MapFlyToSelected = ({ restaurants, selectedRestaurantIndex }) => {
@@ -65,8 +44,8 @@ const MapFlyToSelected = ({ restaurants, selectedRestaurantIndex }) => {
     const selected = restaurants[selectedRestaurantIndex];
     if (!hasValidRestaurantCoords(selected)) return;
 
-    const lat = parseFloat(selected.Latitude);
-    const lng = parseFloat(selected.Longitude);
+    const lat = parseFloat(selected.lat);
+    const lng = parseFloat(selected.lng);
 
     map.flyTo([lat, lng], 15, { duration: 0.8 });
   }, [selectedRestaurantIndex, restaurants, map]);
@@ -87,6 +66,7 @@ const createMarkerIcon = (color) =>
 
 const pipelineIcon = createMarkerIcon("violet");
 const sheetIcon = createMarkerIcon("blue");
+const hunterIcon = createMarkerIcon("orange");
 const selectedIcon = createMarkerIcon("red");
 const userLocationIcon = createMarkerIcon("green");
 
@@ -97,12 +77,6 @@ const MapComponent = ({
 }) => {
   const [userLocation, setUserLocation] = useState(null);
   const [mapCenter] = useState(DEFAULT_CENTER);
-
-  const visibleRestaurants = useMemo(() => {
-    return restaurants
-      .map((marker, index) => ({ marker, index }))
-      .filter(({ marker }) => hasValidRestaurantCoords(marker));
-  }, [restaurants]);
 
   useEffect(() => {
     if (!navigator.geolocation) return;
@@ -136,18 +110,24 @@ const MapComponent = ({
         selectedRestaurantIndex={selectedRestaurantIndex}
       />
 
-      {visibleRestaurants.map(({ marker, index: originalIndex }) => {
-        const lat = parseFloat(marker.Latitude);
-        const lng = parseFloat(marker.Longitude);
-        const restaurantName = marker["Restaurant Name"] || "";
-        const isPipeline = marker.Source === "pipeline";
+      {/* Markers render from the same filtered array used by the list, so both always match. */}
+      {restaurants.map((marker, originalIndex) => {
+        const lat = parseFloat(marker.lat);
+        const lng = parseFloat(marker.lng);
+        const restaurantName = marker.name || "";
+        const sourceLabel = getRestaurantSourceLabel(marker);
+        const isPipeline = sourceLabel === "pipeline";
+        const isHunter = sourceLabel === "hunter";
         const isSelected = originalIndex === selectedRestaurantIndex;
-        const websiteUrl = getPopupWebsiteUrl(marker);
+        // Reuse the same website helper as the list for consistent link behavior.
+        const websiteUrl = getRestaurantWebsiteUrl(marker);
 
         const markerIcon = isSelected
           ? selectedIcon
           : isPipeline
           ? pipelineIcon
+          : isHunter
+          ? hunterIcon
           : sheetIcon;
 
         return (
@@ -167,13 +147,13 @@ const MapComponent = ({
               <div style={{ maxWidth: "240px" }}>
                 <h4>{restaurantName}</h4>
                 <p>
-                  <strong>Source:</strong> {isPipeline ? "Pipeline" : "Sheet"}
+                  <strong>Source:</strong> {getSourceDisplayLabel(sourceLabel)}
                 </p>
-                {marker["Offer Title"] && <p>{marker["Offer Title"]}</p>}
-                {marker.Description && <p>{marker.Description}</p>}
-                {marker.Address && (
+                {marker.offerTitle && <p>{marker.offerTitle}</p>}
+                {marker.description && <p>{marker.description}</p>}
+                {marker.address && (
                   <p>
-                    <strong>Address:</strong> {marker.Address}
+                    <strong>Address:</strong> {marker.address}
                   </p>
                 )}
                 {websiteUrl && (
