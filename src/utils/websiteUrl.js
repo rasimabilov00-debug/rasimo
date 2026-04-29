@@ -41,9 +41,6 @@ const NON_OFFICIAL_HOST_KEYWORDS = [
 
 const WEBSITE_FIELDS = ["Website", "website", "website_link", "link"];
 
-// Verified/curated website overrides by restaurant name.
-// Use null when we explicitly want no link for placeholder/fake entries.
-// This is the main place to add manual website mappings.
 const WEBSITE_OVERRIDES = [
   { match: "aranybastya", website: "https://en.aranybastya.com/" },
   { match: "badburger and more budapest", website: "http://www.badburgerandmore.hu/" },

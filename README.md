@@ -1,120 +1,206 @@
-# Restaurant Map Simulator (rsim)
+# 🍽️ Restaurant Map Simulator (rsim)
 
-A React application displaying a Leaflet map of Budapest restaurants with offers pulled from a Google Sheet. Key enhancements added on top of the default CRA setup:
+A modern full-stack React application for discovering and managing restaurants in Budapest, featuring interactive maps, API-powered data collection, and a fully functional admin panel.
 
-- **Google Sheets integration** using PapaParse to fetch restaurant data (latitude/longitude, offers, etc.)
-- **Backend search integration** with multi-query restaurant discovery (Express + API routes)
-- **Markers on map** for each restaurant with popups showing detailed information
-- **User location marker** and auto-centering using Geolocation API
-- **Restaurant list panel** showing all entries from the sheet in card layout
-- **Unique colored icons** for each restaurant and responsive layout
-- **Pipeline data integration** via JSON (`public/pipeline-restaurants.json`) to simulate external data ingestion
-- **Data merging logic** combining sheet, pipeline, and hunter results into a unified dataset
-- **Source-based UI styling**:
-  - 🟣 Pipeline restaurants → violet markers + highlighted cards
-  - 🟠 Hunter/API restaurants → orange markers + highlighted cards
-  - 🔵 Sheet restaurants → blue markers + standard cards
 ---
 
-## New Feature: Pipeline Integration
+## ✨ Features
 
-This project supports a simulated **data pipeline**, where external restaurant data is ingested and merged with Google Sheets data.
+### Core Features
 
-Pipeline data is stored in:
+* **Interactive Map (Leaflet)** – Explore restaurants on a responsive map with dynamic markers
+* **Google Sheets Integration** – Load and sync restaurant data from external sheets
+* **API-Based Restaurant Discovery** – Fetch restaurants dynamically using SerpAPI (Hunting system)
+* **Restaurant List Panel** – View detailed restaurant information (address, rating, website)
+* **Smart Search & Filtering** – Full-text search with category and source filtering
+* **Favorites System** – Save favorite restaurants (stored in localStorage)
+* **User Location Support** – Auto-detect and center map
 
-public/pipeline-restaurants.json
+---
 
-## Backend Structure (Minimal)
+## 📱 Mobile Responsiveness
 
-Server logic is now split into small modules for readability:
+* Fully responsive UI (mobile, tablet, desktop)
+* Touch-friendly interactions
+* Adaptive layout (map + list stacking)
+* Optimized typography and spacing
 
-- `server.js` for app bootstrap and route mounting
-- `routes/restaurantRoutes.js` for API endpoints
-- `services/restaurantService.js` for search and website-resolution logic
-- `config/searchQueries.js` for curated multi-query search terms
+---
 
-## Legacy Standalone HTML Files
+## 🗺️ Map System
 
-This project runs as a Create React App and uses only public/index.html as the runtime HTML template.
+* Built with **Leaflet + OpenStreetMap**
+* Color-coded markers:
 
-The following files are archived legacy standalone demos and are not used by npm start or npm run build:
+  * 🔵 Sheet data
+  * 🟠 API (Hunting)
+  * 🟢 User location
+  * 🔴 Selected restaurant
+* Interactive popups with restaurant details
 
-- archive/legacy-html/budapest-restaurants-map.html
-- archive/legacy-html/budapest-restaurants-map-complete.html
+---
 
-They were moved out of the project root for safety and clarity, with no deletion.
+## 🔐 Admin Panel
 
-# Getting Started with Create React App
+* Password-protected access
+* Session-based authentication (localStorage)
+* Admin dashboard features:
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+  * Restaurant count statistics
+  * Search & filtering
+  * Source-based filtering (Sheet, Admin, API)
 
-## Available Scripts
+---
 
-In the project directory, you can run:
+## 📊 Restaurant Management (CRUD)
 
-### `npm start`
+* Add new restaurants
+* Edit existing restaurants
+* Delete restaurants
+* Real-time updates in map and list
 
-Runs the app in the development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in your browser.
+Editable fields:
 
-The page will reload when you make changes.\
-You may also see any lint errors in the console.
+* Name, address, category
+* Coordinates (lat/lng)
+* Website
+* Rating
 
-### `npm test`
+---
 
-Launches the test runner in the interactive watch mode.\
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
+## 📈 Data Handling
 
-### `npm run build`
+* Multi-source merging (Sheet + API + Admin)
+* Smart deduplication
+* Data normalization
+* Automatic website resolution
 
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
+---
 
-The build is minified and the filenames include the hashes.\
-Your app is ready to be deployed!
+## 🚀 Quick Start
 
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
+### Prerequisites
 
-### `npm run eject`
+* Node.js (v14+)
+* npm or yarn
 
-**Note: this is a one-way operation. Once you `eject`, you can't go back!**
+### Installation
 
-If you aren't satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
+```bash
+git clone https://github.com/yourusername/rasimo.git
+cd rasimo
+npm install
+```
 
-Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you're on your own.
+### Environment Variables
 
-You don't have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn't feel obligated to use this feature. However we understand that this tool wouldn't be useful if you couldn't customize it when you are ready for it.
+Create a `.env` file:
 
-## Learn More
+```env
+# Admin
+REACT_APP_ADMIN_PASSWORD=your_password
 
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
+# Google Sheets
+REACT_APP_GOOGLE_SHEETS_API_KEY=your_key
 
-To learn React, check out the [React documentation](https://reactjs.org/).
+# SerpAPI (IMPORTANT)
+SERPAPI_API_KEY=your_serpapi_key
+```
 
-### Code Splitting
+---
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/code-splitting](https://facebook.github.io/create-react-app/docs/code-splitting)
+### Run the App
 
-### Analyzing the Bundle Size
+```bash
+# Backend
+npm run server
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size](https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size)
+# Frontend
+npm start
+```
 
-### Making a Progressive Web App
+App runs at:
+👉 http://localhost:3000
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app](https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app)
+---
 
-### Advanced Configuration
+## 📦 Project Structure
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/advanced-configuration](https://facebook.github.io/create-react-app/docs/advanced-configuration)
+```
+rasimo/
+├── src/
+│   ├── components/        # UI components
+│   ├── utils/             # Data fetching & normalization
+│   ├── App.js             # Main app logic
+│   ├── AppRouter.jsx      # Routing
+├── routes/                # API routes
+├── services/              # Backend logic
+├── server.js              # Express server
+```
 
-### Deployment
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/deployment](https://facebook.github.io/create-react-app/docs/deployment)
-
-### `npm run build` fails to minify
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify](https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify)
-
-## Architecture Diagram
+## 🏗️ Architecture Diagram
 
 ![Architecture Diagram](architecture.png)
+---
+
+## 🧠 Key Features Explained
+
+### 🔹 Hunting API (SerpAPI)
+
+* Fetches real restaurant data dynamically
+* Provides up to ~50 restaurants
+* Includes location, ratings, and websites
+
+### 🔹 Admin Panel Flow
+
+1. Login with password
+2. Add/edit restaurants
+3. Changes reflect instantly in UI
+4. Data persists via localStorage
+
+---
+
+## ⚠️ Notes
+
+* Coordinates must match address to display correctly on map
+* Admin data is stored locally (not in database)
+* Restart backend after changing `.env`
+
+---
+
+## 🛠️ Available Scripts
+
+```bash
+npm start        # Run frontend
+npm run server   # Run backend
+npm run build    # Build for production
+```
+
+---
+
+## 🌐 Browser Support
+
+* Chrome / Edge / Firefox / Safari
+* Mobile browsers supported
+
+---
+
+## 🚀 Deployment
+
+* Vercel
+* Netlify
+* Any static hosting + Node backend
+
+---
+
+## 📄 License
+
+MIT
+
+---
+
+## 👨‍💻 Author
+
+Rasim
+
+---

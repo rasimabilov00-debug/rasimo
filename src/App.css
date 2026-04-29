@@ -67,11 +67,18 @@
 
   .search-bar-wrap {
     padding: 10px 12px;
+    gap: 6px;
+  }
+
+  .search-input {
+    font-size: 16px;
+    padding: 12px;
   }
 
   .map-section {
-    height: 50vh;
-    flex: 0 0 50vh;
+    height: 45vh;
+    flex: 0 0 45vh;
+    order: 2;
   }
 
   .list-section {
@@ -79,6 +86,74 @@
     width: 100%;
     border-left: none;
     border-top: 1px solid #ddd;
+    order: 3;
+  }
+}
+
+@media (max-width: 480px) {
+  .app-shell {
+    height: 100dvh;
+  }
+
+  .search-bar-wrap {
+    padding: 8px 12px;
+    gap: 4px;
+  }
+
+  .search-label {
+    font-size: 12px;
+  }
+
+  .search-input {
+    padding: 10px;
+    font-size: 16px;
+    border-radius: 8px;
+  }
+
+  .app-container {
+    flex-direction: column;
+  }
+
+  .map-section {
+    height: 40vh;
+    flex: 0 0 40vh;
+  }
+
+  .list-section {
+    flex: 1;
+    width: 100%;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .leaflet-popup-content-wrapper {
+    max-width: calc(100vw - 40px);
+  }
+
+  .restaurant-popup-card {
+    padding: 10px;
+    gap: 6px;
+  }
+
+  .restaurant-popup-header h4 {
+    font-size: 14px;
+  }
+
+  .restaurant-popup-body p {
+    font-size: 12px;
+  }
+
+  .popup-select-btn,
+  .popup-visit-link {
+    flex: 1;
+    padding: 8px;
+    font-size: 11px;
+  }
+}
+
+@media (min-width: 1200px) {
+  .list-section {
+    flex: 0 0 450px;
   }
 }
 
@@ -108,7 +183,6 @@
   color: #61dafb;
 }
 
-/* Advanced Leaflet popup styling */
 .leaflet-popup-content-wrapper {
   background: linear-gradient(180deg, #ffffff, #f2f9ff);
   border: 2px solid #2980b9;

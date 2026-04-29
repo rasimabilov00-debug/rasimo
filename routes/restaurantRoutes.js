@@ -10,17 +10,27 @@ const router = express.Router();
 
 router.get("/restaurants", async (req, res) => {
   try {
-    const payload = await getRestaurants({
-      googleApiKey: process.env.GOOGLE_PLACES_API_KEY,
+    console.log("GET /restaurants keys", {
+      serpApiKey: !!process.env.SERPAPI_API_KEY,
+      googleApiKey: !!process.env.GOOGLE_PLACES_API_KEY,
     });
-    res.json(payload);
-  } catch (error) {
-    const status = error.message.includes("Missing GOOGLE_PLACES_API_KEY")
-      ? 500
-      : 500;
 
+    const payload = await searchRestaurants({
+      query: "",
+      location: "Budapest, Hungary",
+      limit: 80,
+      serpApiKey: process.env.SERPAPI_API_KEY,
+      googleApiKey: undefined,
+    });
+
+    res.json({
+      count: payload.restaurants.length,
+      data: payload.restaurants,
+      queriesUsed: payload.queriesUsed,
+    });
+  } catch (error) {
     console.error("Places API fetch failed:", error);
-    res.status(status).json({
+    res.status(500).json({
       error: "Failed to fetch restaurants",
       details: error.message,
     });
@@ -36,7 +46,7 @@ router.get("/search-restaurants", async (req, res) => {
       location,
       limit,
       serpApiKey: process.env.SERPAPI_API_KEY,
-      googleApiKey: process.env.GOOGLE_PLACES_API_KEY,
+      googleApiKey: undefined,
     });
 
     res.json(payload);

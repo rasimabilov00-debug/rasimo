@@ -1,24 +1,33 @@
-const normalizeSourceText = (value) => (value || "").toString().trim().toLowerCase();
+const normalizeSourceText = (value) =>
+  (value || "").toString().trim().toLowerCase();
 
 export const normalizeSourceLabel = (value) => {
   const normalized = normalizeSourceText(value);
 
   if (!normalized) return "sheet";
-  if (normalized === "custom" || normalized === "hunter" || normalized === "serpapi") {
-    return "hunter";
+
+  if (
+    normalized === "hunter" ||
+    normalized === "hunting" ||
+    normalized === "api" ||
+    normalized === "serpapi"
+  ) {
+    return "hunting";
   }
-  if (normalized.includes("pipeline")) return "pipeline";
-  if (normalized.includes("sheet") || normalized.includes("form")) return "sheet";
+
+  if (normalized.includes("sheet")) return "sheet";
+  if (normalized.includes("admin")) return "admin";
 
   return normalized;
 };
 
 export const getRestaurantSourceLabel = (restaurant = {}) =>
-  normalizeSourceLabel(restaurant.Source || restaurant.source);
+  normalizeSourceLabel(restaurant?.source);
 
-export const getSourceDisplayLabel = (sourceLabel = "") => {
-  const normalized = normalizeSourceLabel(sourceLabel);
-  if (normalized === "pipeline") return "Pipeline";
-  if (normalized === "hunter") return "Hunter";
+export const getSourceDisplayLabel = (source = "") => {
+  const s = normalizeSourceLabel(source);
+
+  if (s === "admin") return "Admin";
+  if (s === "hunting") return "Hunting";
   return "Sheet";
 };

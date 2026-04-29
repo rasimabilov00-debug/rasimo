@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import "./RestaurantList.css";
 import { getRestaurantWebsiteUrl } from "./utils/websiteUrl";
 import {
@@ -8,7 +8,7 @@ import {
 
 const RestaurantList = ({
   restaurants = [],
-  selectedRestaurantIndex,
+  selectedRestaurantId,
   onRestaurantSelect,
   loading,
   error,
@@ -17,27 +17,64 @@ const RestaurantList = ({
   categories = ["All"],
   searchText = "",
   onSearchChange,
+  searchSuggestions = [],
+  showFavoritesOnly = false,
+  onShowFavoritesOnlyChange,
+  favoriteKeySet,
+  onToggleFavorite,
+  getFavoriteKey,
 }) => {
   const itemRefs = useRef([]);
+  const [isSuggestionOpen, setIsSuggestionOpen] = useState(false);
 
-  // This list is already filtered by App (category + search), so no extra filtering here.
   const indexedRestaurants = useMemo(
     () => restaurants.map((restaurant, index) => ({ restaurant, index })),
     [restaurants]
   );
 
   useEffect(() => {
-    if (selectedRestaurantIndex === null || selectedRestaurantIndex === undefined) {
+    if (!selectedRestaurantId) {
       return;
     }
 
-    if (itemRefs.current[selectedRestaurantIndex]) {
-      itemRefs.current[selectedRestaurantIndex].scrollIntoView({
+    const selectedIndex = indexedRestaurants.findIndex(
+      ({ restaurant }) => restaurant?.id === selectedRestaurantId
+    );
+
+    if (selectedIndex === -1) {
+      return;
+    }
+
+    if (itemRefs.current[selectedIndex]) {
+      itemRefs.current[selectedIndex].scrollIntoView({
         behavior: "smooth",
         block: "center",
       });
     }
-  }, [selectedRestaurantIndex, indexedRestaurants]);
+  }, [selectedRestaurantId, indexedRestaurants]);
+
+  const hasSearchText = searchText.toString().trim() !== "";
+  const visibleSuggestions = hasSearchText && isSuggestionOpen ? searchSuggestions : [];
+
+  const handleSearchChange = (event) => {
+    if (!onSearchChange) return;
+    onSearchChange(event.target.value);
+    setIsSuggestionOpen(true);
+  };
+
+  const handleSuggestionSelect = (suggestion) => {
+    if (onSearchChange) {
+      onSearchChange(suggestion);
+    }
+    setIsSuggestionOpen(false);
+  };
+
+  const handleSearchKeyDown = (event) => {
+    if (event.key === "Escape") {
+      setIsSuggestionOpen(false);
+      event.currentTarget.blur();
+    }
+  };
 
   if (loading) {
     return (
@@ -106,13 +143,50 @@ const RestaurantList = ({
 
           <div className="search-filter modern-filter">
             <label htmlFor="restaurant-search">Search</label>
-            <input
-              id="restaurant-search"
-              type="text"
-              placeholder="burger, pizza, cheap, name..."
-              value={searchText}
-              onChange={(e) => onSearchChange && onSearchChange(e.target.value)}
-            />
+            <div className="search-input-wrap">
+              <input
+                id="restaurant-search"
+                type="text"
+                placeholder="burger, pizza, cheap, name..."
+                value={searchText}
+                onChange={handleSearchChange}
+                onFocus={() => setIsSuggestionOpen(true)}
+                onBlur={() => setIsSuggestionOpen(false)}
+                onKeyDown={handleSearchKeyDown}
+              />
+
+              {visibleSuggestions.length > 0 && (
+                <div className="search-suggestions" role="listbox" aria-label="Search suggestions">
+                  {visibleSuggestions.map((suggestion) => (
+                    <button
+                      key={suggestion}
+                      type="button"
+                      className="search-suggestion-item"
+                      onMouseDown={(event) => event.preventDefault()}
+                      onClick={() => handleSuggestionSelect(suggestion)}
+                    >
+                      {suggestion}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="favorites-filter modern-filter">
+            <label htmlFor="favorites-only">Favorites</label>
+            <label className="favorites-toggle-row" htmlFor="favorites-only">
+              <input
+                id="favorites-only"
+                type="checkbox"
+                checked={showFavoritesOnly}
+                onChange={(e) =>
+                  onShowFavoritesOnlyChange &&
+                  onShowFavoritesOnlyChange(e.target.checked)
+                }
+              />
+              <span>Show favorites only</span>
+            </label>
           </div>
         </div>
 
@@ -121,33 +195,33 @@ const RestaurantList = ({
         ) : (
           <div className="restaurants-grid modern-grid">
             {indexedRestaurants.map(({ restaurant, index }) => {
-              const isSelected = index === selectedRestaurantIndex;
+              const isSelected = restaurant?.id === selectedRestaurantId;
+              const favoriteKey = getFavoriteKey ? getFavoriteKey(restaurant) : "";
+              const isFavorite = favoriteKey ? favoriteKeySet?.has(favoriteKey) : false;
               const sourceLabel = getRestaurantSourceLabel(restaurant);
               const isPipeline = sourceLabel === "pipeline";
-              const isHunter = sourceLabel === "hunter";
-              // Shared helper keeps website links clean and consistent across list/map.
+              const isHunting = sourceLabel === "hunting";
               const websiteUrl = getRestaurantWebsiteUrl(restaurant);
+              const displayPrice = (restaurant.price || "").toString().trim() || "Not listed";
               const sourceBadgeClass = isPipeline
                 ? "pipeline-badge"
-                : isHunter
+                : isHunting
                 ? "hunter-badge"
                 : "sheet-badge";
               const sourceCardClass = isPipeline
                 ? "pipeline-card"
-                : isHunter
+                : isHunting
                 ? "hunter-card"
                 : "sheet-card";
 
               return (
                 <div
-                  key={`${restaurant.id || restaurant.name || "restaurant"}-${index}`}
+                  key={`${favoriteKey || restaurant.id || restaurant.name || "restaurant"}-${index}`}
                   ref={(element) => {
                     itemRefs.current[index] = element;
                   }}
                   className={`restaurant-card modern-card ${isSelected ? "selected" : ""} ${sourceCardClass}`}
-                  onClick={() =>
-                    onRestaurantSelect && onRestaurantSelect(index)
-                  }
+                  onClick={() => onRestaurantSelect && onRestaurantSelect(restaurant.id)}
                 >
                   <div className="restaurant-card-top">
                     <div className="restaurant-title-wrap">
@@ -157,9 +231,24 @@ const RestaurantList = ({
                       )}
                     </div>
 
-                    <span className={`source-badge ${sourceBadgeClass}`}>
-                      {getSourceDisplayLabel(sourceLabel)}
-                    </span>
+                    <div className="restaurant-card-actions">
+                      <button
+                        type="button"
+                        className={`favorite-button ${isFavorite ? "is-favorite" : ""}`}
+                        aria-label={isFavorite ? "Remove from favorites" : "Add to favorites"}
+                        title={isFavorite ? "Remove from favorites" : "Add to favorites"}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onToggleFavorite && onToggleFavorite(restaurant);
+                        }}
+                      >
+                        {isFavorite ? "♥" : "♡"}
+                      </button>
+
+                      <span className={`source-badge ${sourceBadgeClass}`}>
+                        {getSourceDisplayLabel(sourceLabel)}
+                      </span>
+                    </div>
                   </div>
 
                   {restaurant.offerTitle && (
@@ -174,9 +263,7 @@ const RestaurantList = ({
                   )}
 
                   <div className="detail-chips">
-                    {restaurant.price && (
-                      <span className="detail-chip">Price: {restaurant.price}</span>
-                    )}
+                    <span className="detail-chip">Price: {displayPrice}</span>
                     {restaurant.studentDiscount && (
                       <span className="detail-chip detail-chip-discount">
                         Discount: {restaurant.studentDiscount}
@@ -220,7 +307,7 @@ const RestaurantList = ({
                       className="focus-button"
                       onClick={(e) => {
                         e.stopPropagation();
-                        onRestaurantSelect && onRestaurantSelect(index);
+                        onRestaurantSelect && onRestaurantSelect(restaurant.id);
                       }}
                     >
                       View on map

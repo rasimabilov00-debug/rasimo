@@ -10,8 +10,8 @@ import { normalizeSourceLabel } from "./utils/sourceLabel";
 import { normalizeRestaurantList } from "./utils/restaurantNormalizer";
 import "./App.css";
 
-// App is the single source of truth for fetching, merging, and filtering restaurants.
 const TARGET_RESTAURANT_COUNT = 52;
+const FAVORITES_STORAGE_KEY = "restaurantFavorites";
 
 const normalizeText = (value) =>
   (value || "")
@@ -54,6 +54,20 @@ const toKeywordText = (restaurant = {}) => {
   );
 };
 
+const toSuggestionFields = (restaurant = {}) => {
+  const tagValue =
+    Array.isArray(restaurant.tags) || Array.isArray(restaurant.Tags)
+      ? [...(restaurant.tags || []), ...(restaurant.Tags || [])].join(" ")
+      : restaurant.tags || restaurant.Tags || "";
+
+  return [
+    restaurant.name,
+    restaurant.category,
+    tagValue,
+    restaurant.address,
+  ].map((value) => (value || "").toString().trim()).filter(Boolean);
+};
+
 const getSearchScore = (restaurant = {}, searchTokens = [], fullQuery = "") => {
   const nameText = normalizeText(restaurant.name);
   const keywordText = toKeywordText(restaurant);
@@ -87,12 +101,6 @@ const getSearchScore = (restaurant = {}, searchTokens = [], fullQuery = "") => {
   return score;
 };
 
-const hasRenderableCoords = (restaurant = {}) => {
-  const lat = Number.parseFloat(restaurant?.lat);
-  const lng = Number.parseFloat(restaurant?.lng);
-  return !Number.isNaN(lat) && !Number.isNaN(lng);
-};
-
 const hasValue = (value) => {
   if (value === null || value === undefined) return false;
   if (typeof value === "string") return value.trim() !== "";
@@ -118,6 +126,18 @@ const toRestaurantKey = (restaurant = {}) => {
   if (coordinateKey) return `${name}__geo__${coordinateKey}`;
 
   return `${name}__name__`;
+};
+
+const getFavoriteKey = (restaurant = {}) => {
+  const idValue = (restaurant?.id || "").toString().trim();
+  if (idValue) return `id__${idValue}`;
+
+  const name = normalizeText(restaurant?.name);
+  const address = normalizeText(restaurant?.address);
+  if (name && address) return `name_addr__${name}__${address}`;
+  if (name) return `name__${name}`;
+
+  return "";
 };
 
 const toSourceList = (restaurant = {}) => {
@@ -183,11 +203,6 @@ const mergeRestaurantLists = (baseRestaurants = [], hunterRestaurants = []) => {
   const mergedByKey = new Map();
   const orderedKeys = [];
 
-  // Merge strategy:
-  // 1) Use name+address as primary duplicate key.
-  // 2) Fall back to name+coordinates if address is missing.
-  // 3) Merge duplicate records to preserve useful fields from all sources.
-  // 4) Keep insertion order stable so output stays predictable.
   [...baseRestaurants, ...hunterRestaurants].forEach((restaurant, index) => {
     if (!restaurant || !hasValue(restaurant.name)) return;
 
@@ -206,13 +221,22 @@ const mergeRestaurantLists = (baseRestaurants = [], hunterRestaurants = []) => {
   return orderedKeys.map((key) => mergedByKey.get(key)).filter(Boolean);
 };
 
-function App() {
-  const [restaurants, setRestaurants] = useState([]);
+function App({ restaurants, setRestaurants }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [selectedRestaurantIndex, setSelectedRestaurantIndex] = useState(null);
+  const [selectedRestaurantId, setSelectedRestaurantId] = useState(null);
   const [searchText, setSearchText] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("All");
+  const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
+  const [favoriteKeys, setFavoriteKeys] = useState(() => {
+    try {
+      const rawValue = window.localStorage.getItem(FAVORITES_STORAGE_KEY);
+      const parsed = rawValue ? JSON.parse(rawValue) : [];
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  });
 
   useEffect(() => {
     const loadRestaurants = async () => {
@@ -220,7 +244,6 @@ function App() {
         setLoading(true);
         setError(null);
 
-        // Data comes from two sources: sheet/pipeline data + hunter/API search results.
         const [baseResult, hunterResult] = await Promise.allSettled([
           fetchRestaurantsFromSERPAPI(),
           fetchRestaurantsFromHunter(
@@ -251,7 +274,6 @@ function App() {
           console.warn("Hunter fetch failed:", hunterResult.reason);
         }
 
-        // Merge duplicates first, then resolve website links in one pass.
         const combined = mergeRestaurantLists(baseRestaurants, hunterRestaurants).slice(
           0,
           TARGET_RESTAURANT_COUNT
@@ -260,12 +282,26 @@ function App() {
           await resolveRestaurantWebsites(combined)
         );
 
+        let savedAdminRestaurants = [];
+
+try {
+  const saved = localStorage.getItem("adminUpdatedRestaurants");
+  savedAdminRestaurants = saved ? JSON.parse(saved) : [];
+} catch {
+  savedAdminRestaurants = [];
+}
+
+const finalRestaurants = mergeRestaurantLists(
+  savedAdminRestaurants,
+  withResolvedWebsites
+);
+
         console.log("✅ Loaded base restaurants:", baseRestaurants.length);
         console.log("✅ Loaded hunter restaurants:", hunterRestaurants.length);
         console.log("✅ Final merged restaurants:", combined.length);
-        console.log("✅ Website-resolved restaurants:", withResolvedWebsites.length);
+        console.log("✅ Final restaurants including admin changes:", finalRestaurants.length);
 
-        setRestaurants(withResolvedWebsites);
+        setRestaurants(finalRestaurants);
       } catch (err) {
         console.error("Failed to load restaurants:", err);
         setError("Error loading restaurant data.");
@@ -277,8 +313,21 @@ function App() {
     loadRestaurants();
   }, []);
 
-  const handleRestaurantSelect = (index) => {
-    setSelectedRestaurantIndex(index);
+  const handleRestaurantSelect = (restaurantId) => {
+    setSelectedRestaurantId(restaurantId);
+  };
+
+  const toggleFavorite = (restaurant) => {
+    const favoriteKey = getFavoriteKey(restaurant);
+    if (!favoriteKey) return;
+
+    setFavoriteKeys((currentKeys) => {
+      if (currentKeys.includes(favoriteKey)) {
+        return currentKeys.filter((key) => key !== favoriteKey);
+      }
+
+      return [...currentKeys, favoriteKey];
+    });
   };
 
   const normalizedSearch = normalizeText(searchText);
@@ -295,15 +344,21 @@ function App() {
     ).sort(),
   ];
 
-  // Filtering happens only here so map markers and list cards always match.
+  const favoriteKeySet = useMemo(() => new Set(favoriteKeys), [favoriteKeys]);
+
   const filteredRestaurants = useMemo(() => {
     return restaurants
       .map((restaurant, originalIndex) => ({ restaurant, originalIndex }))
       .filter(({ restaurant }) => {
-        return (
+        const matchesCategory =
           selectedCategory === "All" ||
-          (restaurant?.category || "").toString().trim() === selectedCategory
-        );
+          (restaurant?.category || "").toString().trim() === selectedCategory;
+
+        if (!matchesCategory) return false;
+        if (!showFavoritesOnly) return true;
+
+        const favoriteKey = getFavoriteKey(restaurant);
+        return favoriteKey ? favoriteKeySet.has(favoriteKey) : false;
       })
       .map(({ restaurant, originalIndex }) => {
         if (searchTokens.length === 0) {
@@ -318,13 +373,80 @@ function App() {
         if (b.score !== a.score) return b.score - a.score;
         return a.originalIndex - b.originalIndex;
       })
-      .map(({ restaurant }) => restaurant)
-      .filter(hasRenderableCoords);
-  }, [restaurants, selectedCategory, searchTokens, normalizedSearch]);
+      .map(({ restaurant }) => restaurant);
+  }, [
+    restaurants,
+    selectedCategory,
+    searchTokens,
+    normalizedSearch,
+    showFavoritesOnly,
+    favoriteKeySet,
+  ]);
+
+  const searchSuggestions = useMemo(() => {
+    if (!normalizedSearch) return [];
+
+    const suggestions = [];
+    const seen = new Set();
+
+    for (const restaurant of restaurants) {
+      if (
+        selectedCategory !== "All" &&
+        (restaurant?.category || "").toString().trim() !== selectedCategory
+      ) {
+        continue;
+      }
+
+      if (showFavoritesOnly) {
+        const favoriteKey = getFavoriteKey(restaurant);
+        if (!favoriteKey || !favoriteKeySet.has(favoriteKey)) {
+          continue;
+        }
+      }
+
+      const fields = toSuggestionFields(restaurant);
+
+      for (const field of fields) {
+        const normalizedField = normalizeText(field);
+
+        if (
+          !normalizedField.includes(normalizedSearch) ||
+          seen.has(normalizedField)
+        ) {
+          continue;
+        }
+
+        seen.add(normalizedField);
+        suggestions.push(field);
+
+        if (suggestions.length >= 8) {
+          return suggestions;
+        }
+      }
+    }
+
+    return suggestions;
+  }, [
+    restaurants,
+    selectedCategory,
+    normalizedSearch,
+    showFavoritesOnly,
+    favoriteKeySet,
+  ]);
 
   useEffect(() => {
-    setSelectedRestaurantIndex(null);
-  }, [searchText, selectedCategory]);
+    setSelectedRestaurantId(null);
+  }, [searchText, selectedCategory, showFavoritesOnly]);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(
+        FAVORITES_STORAGE_KEY,
+        JSON.stringify(favoriteKeys)
+      );
+    } catch {
+    }
+  }, [favoriteKeys]);
 
   return (
     <div className="app-shell">
@@ -333,14 +455,14 @@ function App() {
           <MapComponent
             restaurants={filteredRestaurants}
             onRestaurantSelect={handleRestaurantSelect}
-            selectedRestaurantIndex={selectedRestaurantIndex}
+            selectedRestaurantId={selectedRestaurantId}
             loading={loading}
           />
         </div>
         <div className="list-section">
           <RestaurantList
             restaurants={filteredRestaurants}
-            selectedRestaurantIndex={selectedRestaurantIndex}
+            selectedRestaurantId={selectedRestaurantId}
             onRestaurantSelect={handleRestaurantSelect}
             loading={loading}
             error={error}
@@ -349,6 +471,12 @@ function App() {
             categories={categoryOptions}
             searchText={searchText}
             onSearchChange={setSearchText}
+            searchSuggestions={searchSuggestions}
+            showFavoritesOnly={showFavoritesOnly}
+            onShowFavoritesOnlyChange={setShowFavoritesOnly}
+            favoriteKeySet={favoriteKeySet}
+            onToggleFavorite={toggleFavorite}
+            getFavoriteKey={getFavoriteKey}
           />
         </div>
       </div>

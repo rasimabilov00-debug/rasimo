@@ -14,9 +14,7 @@ const SHEETS_API_URL = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID
 )}?key=${API_KEY}`;
 
 const SHEET_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv`;
-const PIPELINE_URL = "/pipeline-restaurants.json";
 
-// Data source 1: Google Sheet (API first, CSV fallback). Data source 2: local pipeline JSON.
 
 const normalizeText = (value) => (value || "").toString().trim();
 const normalizeLookupText = (value) => normalizeText(value).toLowerCase();
@@ -33,7 +31,6 @@ const toCoordinateKey = (restaurant = {}) => {
   const lng = Number.parseFloat(restaurant.lng);
   if (Number.isNaN(lat) || Number.isNaN(lng)) return "";
 
-  // Round coordinates for stable duplicate matching across source precision differences.
   return `${lat.toFixed(5)}__${lng.toFixed(5)}`;
 };
 
@@ -96,7 +93,6 @@ const mergeRestaurantRecord = (existing = {}, incoming = {}) => {
     merged[key] = pickPreferredValue(existing[key], incoming[key]);
   });
 
-  // Keep source lineage from all matching records while preserving first-source stability.
   const sources = Array.from(
     new Set([...toSourceList(existing), ...toSourceList(incoming)])
   );
@@ -104,7 +100,6 @@ const mergeRestaurantRecord = (existing = {}, incoming = {}) => {
   if (sources.length > 0) {
     merged.source = sources[0];
     merged.sources = sources;
-    // Keep legacy aliases temporarily so older code paths do not break.
     merged.Source = sources[0];
     merged.Sources = sources;
   }
@@ -134,16 +129,12 @@ const toRestaurantShape = (row = {}, source = "sheet") =>
     source: row.source || row.Source || source,
   }, { defaultSource: source });
 
-const mergeRestaurants = (sheetRestaurants = [], pipelineRestaurants = []) => {
+const mergeRestaurants = (sheetRestaurants = []) => {
   const mergedByKey = new Map();
   const orderedKeys = [];
 
-  // Merge strategy:
-  // 1) Shape all records into a common schema.
-  // 2) Deduplicate by name+address when available, otherwise by name+coordinates.
-  // 3) Merge duplicate rows to keep the most useful non-empty fields from each source.
-  // 4) Keep insertion order stable so results are predictable across renders.
-  [...pipelineRestaurants, ...sheetRestaurants].forEach((restaurant, index) => {
+
+  sheetRestaurants.forEach((restaurant, index) => {
     const shaped = toRestaurantShape(restaurant, restaurant.source || "sheet");
 
     if (!normalizeText(shaped.name)) return;
@@ -234,7 +225,7 @@ const fetchSheetRestaurants = async () => {
     console.log("✅ CSV total rows:", parsed.length);
     console.log("🗺️ CSV valid restaurants:", valid.length);
     console.log(
-      "🍽️ Sheet restaurant names:",
+        "🍽️ Sheet restaurant names:",
       valid.map((r) => r.name)
     );
 
@@ -245,50 +236,11 @@ const fetchSheetRestaurants = async () => {
   }
 };
 
-const fetchPipelineRestaurants = async () => {
-  try {
-    console.log(`🟣 Fetching pipeline restaurants from ${PIPELINE_URL}...`);
-    const response = await fetch(PIPELINE_URL);
 
-    if (!response.ok) {
-      throw new Error(`Pipeline file fetch failed: ${response.status}`);
-    }
-
-    const data = await response.json();
-    const parsedArray = Array.isArray(data)
-      ? data
-      : Array.isArray(data.restaurants)
-      ? data.restaurants
-      : [];
-
-    const parsed = parsedArray.map((item) => toRestaurantShape(item, "pipeline"));
-
-    const valid = parsed.filter(
-      (r) => normalizeText(r.name) && hasValidCoords(r)
-    );
-
-    console.log("🟣 Pipeline total rows:", parsed.length);
-    console.log("🟣 Pipeline valid restaurants:", valid.length);
-    console.log(
-      "🟣 Pipeline restaurant names:",
-      valid.map((r) => r.name)
-    );
-
-    return valid;
-  } catch (error) {
-    console.warn("⚠️ Pipeline fetch failed:", error);
-    return [];
-  }
-};
 
 export const fetchRestaurantData = async () => {
-  // Fetch both sources in parallel, then return one merged list for the app.
-  const [sheetRestaurants, pipelineRestaurants] = await Promise.all([
-    fetchSheetRestaurants(),
-    fetchPipelineRestaurants(),
-  ]);
-
-  const merged = mergeRestaurants(sheetRestaurants, pipelineRestaurants);
+  const sheetRestaurants = await fetchSheetRestaurants();
+  const merged = mergeRestaurants(sheetRestaurants);
 
   console.log("✅ Final merged restaurants:", merged.length);
   console.log(

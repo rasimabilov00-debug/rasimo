@@ -1,6 +1,7 @@
 const { SEARCH_QUERIES, BUDAPEST_CENTER } = require("../config/searchQueries");
 
 const WEBSITE_LOOKUP_CACHE = new Map();
+const COORDINATE_LOOKUP_CACHE = new Map();
 
 const NON_OFFICIAL_HOST_HINTS = [
   "google.com",
@@ -221,9 +222,142 @@ const searchText = async ({ query, googleApiKey }) => {
   return Array.isArray(data.places) ? data.places : [];
 };
 
-const fetchSerpApiQuery = async ({ query, location, count, serpApiKey }) => {
+const extractGpsCoordinates = (item = {}) => {
+  const latitude =
+    item.gps_coordinates?.latitude ?? item.location?.latitude ?? item.latitude ?? null;
+  const longitude =
+    item.gps_coordinates?.longitude ?? item.location?.longitude ?? item.longitude ?? null;
+
+  const lat = Number.parseFloat(latitude);
+  const lng = Number.parseFloat(longitude);
+
+  if (Number.isNaN(lat) || Number.isNaN(lng)) return null;
+
+  return { latitude: lat, longitude: lng };
+};
+
+const fetchSerpApiMapCoordinates = async ({ query, serpApiKey }) => {
   const response = await fetch(
-    `https://serpapi.com/search?engine=google_local&q=${encodeURIComponent(query)}&location=${encodeURIComponent(location)}&api_key=${serpApiKey}&num=${count}`
+    `https://serpapi.com/search?engine=google_maps&q=${encodeURIComponent(query)}&api_key=${serpApiKey}`
+  );
+
+  if (!response.ok) {
+    throw new Error(`SerpApi maps error: ${response.status}`);
+  }
+
+  const data = await response.json();
+  let candidates = [];
+
+  if (Array.isArray(data.local_results)) {
+    candidates = data.local_results;
+  } else if (Array.isArray(data.search_results)) {
+    candidates = data.search_results;
+  } else if (data.place_results) {
+    candidates = Array.isArray(data.place_results)
+      ? data.place_results
+      : [data.place_results];
+  }
+
+  for (const item of candidates) {
+    const coords = extractGpsCoordinates(item);
+    if (coords) return coords;
+  }
+
+  return null;
+};
+
+const resolveRestaurantCoordinates = async ({ restaurant, serpApiKey }) => {
+  if (!serpApiKey) return restaurant;
+
+  const existingCoords = extractGpsCoordinates(restaurant);
+  if (existingCoords) return restaurant;
+
+  const name = toRestaurantName(restaurant);
+  const address = toRestaurantAddress(restaurant);
+  if (!name && !address) return restaurant;
+
+  const cacheKey = `${normalizeName(name)}__${normalizeAddress(address)}`;
+  if (COORDINATE_LOOKUP_CACHE.has(cacheKey)) {
+    const cached = COORDINATE_LOOKUP_CACHE.get(cacheKey);
+    return {
+      ...restaurant,
+      gps_coordinates: cached,
+      latitude: cached.latitude,
+      longitude: cached.longitude,
+    };
+  }
+
+  try {
+    const queryCandidates = [];
+
+    if (name && address) {
+      queryCandidates.push(`${name} ${address} Budapest`);
+      queryCandidates.push(`${address} Budapest`);
+    }
+
+    if (name) {
+      queryCandidates.push(`${name} Budapest`);
+    }
+
+    if (address) {
+      queryCandidates.push(`${address} Budapest`);
+    }
+
+    console.log(`resolveRestaurantCoordinates for ${name} / ${address}:`, queryCandidates);
+
+    let coords = null;
+    for (const queryText of queryCandidates) {
+      console.log(`  trying coordinate lookup: ${queryText}`);
+      coords = await fetchSerpApiMapCoordinates({ query: queryText, serpApiKey });
+      console.log(`  result coords:`, coords);
+      if (coords) break;
+    }
+
+    if (!coords) {
+      console.log(`  no coordinates found for ${name}`);
+      return restaurant;
+    }
+
+    COORDINATE_LOOKUP_CACHE.set(cacheKey, coords);
+
+    return {
+      ...restaurant,
+      gps_coordinates: coords,
+      latitude: coords.latitude,
+      longitude: coords.longitude,
+    };
+  } catch (error) {
+    console.warn(`Coordinate lookup failed for ${name}:`, error.message);
+    return restaurant;
+  }
+};
+
+const resolveRestaurantCoordinatesForList = async ({ restaurants, serpApiKey }) => {
+  if (!serpApiKey || !Array.isArray(restaurants) || restaurants.length === 0) {
+    return Array.isArray(restaurants) ? restaurants : [];
+  }
+
+  return Promise.all(
+    restaurants.map((restaurant) =>
+      resolveRestaurantCoordinates({ restaurant, serpApiKey })
+    )
+  );
+};
+
+const fetchSerpApiQuery = async ({ query, location, count, serpApiKey }) => {
+  const normalizedQuery = (query || "").toString().trim();
+  const normalizedLocation = (location || "").toString().trim();
+  const queryWithLocation =
+    normalizedLocation &&
+    normalizedQuery &&
+    !normalizedQuery.toLowerCase().includes(normalizedLocation.toLowerCase())
+      ? `${normalizedQuery} ${normalizedLocation}`
+      : normalizedQuery || normalizedLocation;
+
+  const requestQuery = queryWithLocation || normalizedQuery;
+
+  const response = await fetch(
+    `https://serpapi.com/search.json?engine=google_maps&q=${encodeURIComponent(requestQuery)}&api_key=${serpApiKey}&num=${count}`
   );
 
   if (!response.ok) {
@@ -231,7 +365,12 @@ const fetchSerpApiQuery = async ({ query, location, count, serpApiKey }) => {
   }
 
   const data = await response.json();
-  const items = data.local_results?.places || data.local_results || [];
+  const items =
+    data.place_results ||
+    data.local_results?.places ||
+    data.local_results ||
+    data.search_results ||
+    [];
 
   return Array.isArray(items) ? items.map(mapSerpApiItem) : [];
 };
@@ -320,22 +459,64 @@ const resolveOfficialWebsite = async ({
   }
 };
 
-const getRestaurants = async ({ googleApiKey }) => {
-  if (!googleApiKey) {
-    throw new Error("Missing GOOGLE_PLACES_API_KEY in server environment");
+const getRestaurants = async ({ googleApiKey, serpApiKey }) => {
+  console.log("getRestaurants keys", {
+    googleApiKey: !!googleApiKey,
+    serpApiKey: !!serpApiKey,
+  });
+
+  if (!googleApiKey && !serpApiKey) {
+    throw new Error("Missing API keys: set SERPAPI_API_KEY or GOOGLE_PLACES_API_KEY");
   }
 
-  const results = await Promise.all(
-    SEARCH_QUERIES.map((query) => searchText({ query, googleApiKey }))
-  );
+  if (!googleApiKey && serpApiKey) {
+    const { restaurants } = await searchRestaurants({
+      query: "",
+      location: "Budapest, Hungary",
+      limit: 80,
+      serpApiKey,
+      googleApiKey: undefined,
+    });
 
-  const flattened = results.flat().map(mapPlaceToRestaurant);
-  const unique = dedupeRestaurants(flattened);
+    return {
+      count: restaurants.length,
+      data: restaurants,
+    };
+  }
 
-  return {
-    count: unique.length,
-    data: unique,
-  };
+  try {
+    const results = await Promise.all(
+      SEARCH_QUERIES.map((query) => searchText({ query, googleApiKey }))
+    );
+
+    const flattened = results.flat().map(mapPlaceToRestaurant);
+    const unique = dedupeRestaurants(flattened);
+
+    return {
+      count: unique.length,
+      data: unique,
+    };
+  } catch (error) {
+    if (
+      serpApiKey &&
+      error.message.includes("API key not valid")
+    ) {
+      const { restaurants } = await searchRestaurants({
+        query: "",
+        location: "Budapest, Hungary",
+        limit: 80,
+        serpApiKey,
+        googleApiKey: undefined,
+      });
+
+      return {
+        count: restaurants.length,
+        data: restaurants,
+      };
+    }
+
+    throw error;
+  }
 };
 
 const searchRestaurants = async ({
@@ -354,8 +535,21 @@ const searchRestaurants = async ({
     ? totalLimit
     : Math.max(3, Math.ceil(totalLimit / queriesToUse.length));
 
+  const runGoogleSearch = async () => {
+    if (!googleApiKey) {
+      throw new Error("Missing API keys: set SERPAPI_API_KEY or GOOGLE_PLACES_API_KEY");
+    }
+
+    const results = await Promise.all(
+      queriesToUse.map((queryText) => searchText({ query: queryText, googleApiKey }))
+    );
+
+    const flattened = results.flat().map(mapPlaceResult);
+    return dedupeRestaurants(flattened).slice(0, totalLimit);
+  };
+
   if (serpApiKey) {
-    const queryResults = await Promise.all(
+    const queryResults = await Promise.allSettled(
       queriesToUse.map((queryText) =>
         fetchSerpApiQuery({
           query: queryText,
@@ -366,20 +560,62 @@ const searchRestaurants = async ({
       )
     );
 
-    const combined = dedupeRestaurants(queryResults.flat()).slice(0, totalLimit);
-    return { restaurants: combined, queriesUsed: queriesToUse };
+    const serpRestaurants = dedupeRestaurants(
+      queryResults
+        .filter((result) => result.status === "fulfilled")
+        .flatMap((result) => result.value || [])
+    );
+
+    const failedCount = queryResults.filter(
+      (result) => result.status === "rejected"
+    ).length;
+
+    if (failedCount > 0) {
+      console.warn(
+        `SerpApi partial failure: ${failedCount}/${queriesToUse.length} queries failed. Falling back to Google Places when available.`
+      );
+    }
+
+    if (serpRestaurants.length >= totalLimit || !googleApiKey) {
+      const resolved = await resolveRestaurantCoordinatesForList({
+        restaurants: serpRestaurants.slice(0, totalLimit),
+        serpApiKey,
+      });
+
+      return {
+        restaurants: resolved,
+        queriesUsed: queriesToUse,
+      };
+    }
+
+    try {
+      const googleRestaurants = await runGoogleSearch();
+      const merged = dedupeRestaurants([
+        ...serpRestaurants,
+        ...googleRestaurants,
+      ]).slice(0, totalLimit);
+
+      const resolved = await resolveRestaurantCoordinatesForList({
+        restaurants: merged,
+        serpApiKey,
+      });
+
+      return { restaurants: resolved, queriesUsed: queriesToUse };
+    } catch (googleError) {
+      console.warn("Google Places fallback failed:", googleError.message);
+      const resolved = await resolveRestaurantCoordinatesForList({
+        restaurants: serpRestaurants.slice(0, totalLimit),
+        serpApiKey,
+      });
+
+      return {
+        restaurants: resolved,
+        queriesUsed: queriesToUse,
+      };
+    }
   }
 
-  if (!googleApiKey) {
-    throw new Error("Missing API keys: set SERPAPI_API_KEY or GOOGLE_PLACES_API_KEY");
-  }
-
-  const results = await Promise.all(
-    queriesToUse.map((queryText) => searchText({ query: queryText, googleApiKey }))
-  );
-
-  const flattened = results.flat().map(mapPlaceResult);
-  const unique = dedupeRestaurants(flattened).slice(0, totalLimit);
+  const unique = await runGoogleSearch();
 
   return { restaurants: unique, queriesUsed: queriesToUse };
 };

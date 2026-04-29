@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { MapContainer, TileLayer, Marker, Popup, useMap } from "react-leaflet";
 import { Icon } from "leaflet";
 import L from "leaflet";
@@ -29,26 +29,45 @@ const hasValidRestaurantCoords = (restaurant) => {
   );
 };
 
-const MapFlyToSelected = ({ restaurants, selectedRestaurantIndex }) => {
+const MapFlyToSelected = ({ restaurants, selectedRestaurantId }) => {
   const map = useMap();
 
   useEffect(() => {
-    if (
-      selectedRestaurantIndex === null ||
-      selectedRestaurantIndex === undefined ||
-      !restaurants[selectedRestaurantIndex]
-    ) {
+    if (!selectedRestaurantId) {
       return;
     }
 
-    const selected = restaurants[selectedRestaurantIndex];
+    const selected = restaurants.find(
+      (restaurant) => restaurant?.id === selectedRestaurantId
+    );
+
     if (!hasValidRestaurantCoords(selected)) return;
 
     const lat = parseFloat(selected.lat);
     const lng = parseFloat(selected.lng);
 
     map.flyTo([lat, lng], 15, { duration: 0.8 });
-  }, [selectedRestaurantIndex, restaurants, map]);
+  }, [selectedRestaurantId, restaurants, map]);
+
+  return null;
+};
+
+const MapFlyToUser = ({ userLocation }) => {
+  const map = useMap();
+  const hasCenteredOnUser = useRef(false);
+
+  useEffect(() => {
+    if (!Array.isArray(userLocation) || userLocation.length !== 2) {
+      return;
+    }
+
+    if (hasCenteredOnUser.current) {
+      return;
+    }
+
+    hasCenteredOnUser.current = true;
+    map.flyTo(userLocation, 14, { duration: 0.9 });
+  }, [map, userLocation]);
 
   return null;
 };
@@ -73,7 +92,7 @@ const userLocationIcon = createMarkerIcon("green");
 const MapComponent = ({
   restaurants = [],
   onRestaurantSelect,
-  selectedRestaurantIndex,
+  selectedRestaurantId,
 }) => {
   const [userLocation, setUserLocation] = useState(null);
   const [mapCenter] = useState(DEFAULT_CENTER);
@@ -88,6 +107,11 @@ const MapComponent = ({
       },
       (error) => {
         console.error("Error getting user location:", error);
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 12000,
+        maximumAge: 30000,
       }
     );
   }, []);
@@ -99,34 +123,31 @@ const MapComponent = ({
         attribution='&copy; <a href="http://osm.org/copyright">OpenStreetMap</a> contributors'
       />
 
-      {userLocation && (
-        <Marker position={userLocation} icon={userLocationIcon}>
-          <Popup>📍 You are here</Popup>
-        </Marker>
-      )}
-
       <MapFlyToSelected
         restaurants={restaurants}
-        selectedRestaurantIndex={selectedRestaurantIndex}
+        selectedRestaurantId={selectedRestaurantId}
       />
 
-      {/* Markers render from the same filtered array used by the list, so both always match. */}
+      <MapFlyToUser userLocation={userLocation} />
       {restaurants.map((marker, originalIndex) => {
+        if (!hasValidRestaurantCoords(marker)) {
+          return null;
+        }
+
         const lat = parseFloat(marker.lat);
         const lng = parseFloat(marker.lng);
         const restaurantName = marker.name || "";
         const sourceLabel = getRestaurantSourceLabel(marker);
         const isPipeline = sourceLabel === "pipeline";
-        const isHunter = sourceLabel === "hunter";
-        const isSelected = originalIndex === selectedRestaurantIndex;
-        // Reuse the same website helper as the list for consistent link behavior.
+        const isHunting = sourceLabel === "hunting";
+        const isSelected = marker.id === selectedRestaurantId;
         const websiteUrl = getRestaurantWebsiteUrl(marker);
 
         const markerIcon = isSelected
           ? selectedIcon
           : isPipeline
           ? pipelineIcon
-          : isHunter
+          : isHunting
           ? hunterIcon
           : sheetIcon;
 
@@ -138,7 +159,7 @@ const MapComponent = ({
             eventHandlers={{
               click: () => {
                 if (onRestaurantSelect) {
-                  onRestaurantSelect(originalIndex);
+                  onRestaurantSelect(marker.id);
                 }
               },
             }}
@@ -166,6 +187,12 @@ const MapComponent = ({
           </Marker>
         );
       })}
+
+      {userLocation && (
+        <Marker position={userLocation} icon={userLocationIcon} zIndexOffset={1000}>
+          <Popup>📍 You are here</Popup>
+        </Marker>
+      )}
     </MapContainer>
   );
 };

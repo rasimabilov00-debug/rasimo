@@ -1,8 +1,3 @@
-/**
- * Restaurant Hunter - Integrates SerpApi notebook logic into React
- * Fetches restaurants with websites and enriches data from the API
- */
-
 import { normalizeSourceLabel } from "./sourceLabel";
 import { normalizeRestaurant } from "./restaurantNormalizer";
 
@@ -47,7 +42,6 @@ const toRestaurantKey = (restaurant = {}) => {
 const extractWebsiteFromItem = (item) => {
   if (!item || typeof item !== "object") return null;
 
-  // Check nested links object
   if (item.links && typeof item.links === "object") {
     const website = item.links.website;
     if (typeof website === "string" && website.startsWith("http")) {
@@ -55,7 +49,6 @@ const extractWebsiteFromItem = (item) => {
     }
   }
 
-  // Check common website keys
   for (const key of ["website", "website_link", "link"]) {
     const val = item[key];
     if (typeof val === "string" && val.startsWith("http")) {
@@ -66,9 +59,6 @@ const extractWebsiteFromItem = (item) => {
   return null;
 };
 
-/**
- * Format restaurant data from SerpApi response to match app expectations
- */
 const formatRestaurantData = (item) => {
   const website = extractWebsiteFromItem(item) || "";
 
@@ -80,7 +70,7 @@ const formatRestaurantData = (item) => {
       lat: item.gps_coordinates?.latitude ?? item.latitude ?? null,
       lng: item.gps_coordinates?.longitude ?? item.longitude ?? null,
       website,
-      source: normalizeSourceLabel("hunter"),
+      source: normalizeSourceLabel("hunting"),
       category: item.type || "Restaurant",
       description: item.description || "",
       offerTitle: item.offer_title || (item.description ? "Available Offer" : ""),
@@ -91,13 +81,10 @@ const formatRestaurantData = (item) => {
       reviews: item.reviews || "",
       phone: item.phone || "",
     },
-    { defaultSource: "hunter" }
+    { defaultSource: "hunting" }
   );
 };
 
-/**
- * Search restaurants using backend API (which calls SerpApi)
- */
 export const searchRestaurantsWithWebsites = async (
   query = "",
   location = "Budapest, Hungary",
@@ -106,39 +93,43 @@ export const searchRestaurantsWithWebsites = async (
   try {
     const params = new URLSearchParams({
       location: location,
-      limit: targetCount
+      limit: targetCount,
     });
 
     if ((query || "").toString().trim()) {
       params.set("q", query);
     }
 
-    const response = await fetch(`/api/search-restaurants?${params}`);
-    
+    let response = await fetch(`/api/search-restaurants?${params}`);
+
     if (!response.ok) {
       console.warn("API search failed, will use fallback data");
-      return [];
+      response = await fetch("/api/restaurants");
     }
 
-    // Backend provides search results (SerpApi or Google Places fallback).
     const data = await response.json();
-    const items = data.restaurants || [];
+    let items = data.restaurants || data.data || [];
 
-    // Keep restaurants even if website is missing, because many local results
-    // do not include official websites in this endpoint response.
+    if (!Array.isArray(items) || items.length === 0) {
+      const fallbackResponse = await fetch("/api/restaurants");
+      if (fallbackResponse.ok) {
+        const fallbackData = await fallbackResponse.json();
+        items = fallbackData.data || fallbackData.restaurants || [];
+      }
+    }
+
     const formatted = items
       .map((item) => {
         const website = extractWebsiteFromItem(item);
         const formattedItem = formatRestaurantData(item);
 
-        // Keep only likely official links; marketplace/social links are cleared.
         if (website && !isLikelyOfficial(website)) {
           formattedItem.website = "";
         }
 
         return formattedItem;
       })
-      .filter(Boolean)
+      .filter(Boolean);
 
     const seen = new Set();
     const unique = formatted.filter((restaurant) => {
@@ -156,12 +147,8 @@ export const searchRestaurantsWithWebsites = async (
   }
 };
 
-/**
- * Enrich restaurant data by scanning websites for menus/offers/discounts
- */
 export const enrichRestaurantData = async (restaurants) => {
   try {
-    // Call backend to scan websites
     const response = await fetch("/api/scan-restaurants", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -182,16 +169,12 @@ export const enrichRestaurantData = async (restaurants) => {
   }
 };
 
-/**
- * Resolve official website URLs for a list of restaurants through backend lookup.
- */
 export const resolveRestaurantWebsites = async (restaurants = []) => {
   try {
     if (!Array.isArray(restaurants) || restaurants.length === 0) {
       return restaurants;
     }
 
-    // Ask backend to find a better official website when one is missing.
     const response = await fetch("/api/resolve-websites", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -213,9 +196,6 @@ export const resolveRestaurantWebsites = async (restaurants = []) => {
   }
 };
 
-/**
- * Main function to fetch and enrich restaurant data from notebook logic
- */
 export const fetchRestaurantsFromHunter = async (
   query = "",
   location = "Budapest, Hungary",
@@ -225,7 +205,6 @@ export const fetchRestaurantsFromHunter = async (
   console.log("🔍 Starting restaurant hunt...");
 
   try {
-    // Step 1: Search for restaurants and their websites
     const restaurants = await searchRestaurantsWithWebsites(query, location, targetCount);
 
     if (restaurants.length === 0) {
@@ -233,7 +212,6 @@ export const fetchRestaurantsFromHunter = async (
       return [];
     }
 
-    // Step 2: Optionally enrich with website scanning
     if (shouldEnrich) {
       const enriched = await enrichRestaurantData(restaurants);
       return enriched;
